@@ -21,6 +21,8 @@ use actix_web::http::StatusCode;
 use std::sync::Arc;
 use std::pin::Pin;
 use std::fmt::Debug;
+use actix_web::guard::Get;
+use std::iter::Map;
 
 
 #[actix_rt::main]
@@ -49,7 +51,6 @@ async fn handle_request(req: HttpRequest, ar: web::Data<Addr<ArchiveActor>>) -> 
     println!("REQ: {:?}", req);
     let mut result = ar.send(GetDump).await.expect("asd").expect("jj");
     HttpResponse::Ok().streaming(result.map(|b| Ok(b) as Result<Bytes, ()>))
-//""
 }
 
 
@@ -60,11 +61,7 @@ struct ArchiveActor {
 impl ArchiveActor {
     fn new() -> ArchiveActor {
         ArchiveActor {
-            children: vec![
-                ChunkActor::new(1).start(),
-                ChunkActor::new(2).start(),
-                ChunkActor::new(3).start(),
-            ]
+            children: (1..100).map(|i| ChunkActor::new(i).start()).collect()
         }
     }
 }
@@ -85,8 +82,10 @@ impl Handler<GetDump> for ArchiveActor {
     type Result = GetDumpResult;
 
     fn handle(&mut self, msg: GetDump, ctx: &mut Self::Context) -> Self::Result {
-        let stream = iter(1..10)
-            .map(|i| (Bytes::from("D")));
+        let stream = iter(self.children.clone())
+            .map(|c| c.send(GetChunk))
+            .buffer_unordered(3)
+            .map(|r| r.expect("response").expect("Bytes"));
         Ok(Box::pin(stream))
     }
 }
@@ -108,7 +107,7 @@ impl Actor for ChunkActor {
 
 struct GetChunk;
 
-type GetChunkResult = Arc<Bytes>;
+type GetChunkResult = Result<Bytes, ()>;
 
 impl Message for GetChunk {
     type Result = GetChunkResult;
@@ -118,6 +117,6 @@ impl Handler<GetChunk> for ChunkActor {
     type Result = GetChunkResult;
 
     fn handle(&mut self, msg: GetChunk, ctx: &mut Self::Context) -> Self::Result {
-        Arc::new(Bytes::from(format!("{}", self.i)))
+        Ok(Bytes::from(format!("{}\n", self.i)))
     }
 }
