@@ -35,7 +35,7 @@ async fn main() -> std::io::Result<()> {
 
     let stream = update_stream.for_each(|e| {
         async {
-            let result = archive_actor_for_stream.send(e).await;
+            let _result = archive_actor_for_stream.send(e).await;
             ()
         }
     });
@@ -75,7 +75,7 @@ impl ArchiveActor {
 
 impl Actor for ArchiveActor {
     type Context = Context<Self>;
-    fn started(&mut self, ctx: &mut Self::Context) {
+    fn started(&mut self, _ctx: &mut Self::Context) {
         info!("ArchiveActor started!")
     }
 }
@@ -94,10 +94,9 @@ impl Handler<GetDump> for ArchiveActor {
     fn handle(&mut self, _msg: GetDump, _ctx: &mut Self::Context) -> Self::Result {
         let stream = iter(self.children.clone())
             .map(|c| c.send(GetChunk))
-            .buffer_unordered(3)
+            .buffer_unordered(6)
             .map(|r| {
                 let b = r.expect("response").expect("Bytes");
-                debug!("Got chunk: {:?}", b);
                 b
             });
         Ok(Box::pin(stream))
@@ -107,7 +106,7 @@ impl Handler<GetDump> for ArchiveActor {
 impl Handler<UpdateCommand> for ArchiveActor {
     type Result = Result<Pin<Box<dyn Future<Output = ()> + Send + Sync>>, ()>;
 
-    fn handle(&mut self, item: UpdateCommand, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, item: UpdateCommand, _ctx: &mut Self::Context) -> Self::Result {
         println!("Archive UpdateCommand: {}", item.id);
         let child_index = item.id % 1000;
         let child = self.children.get(child_index as usize).unwrap();
@@ -119,9 +118,10 @@ impl Handler<UpdateCommand> for ArchiveActor {
 impl Handler<UpdateCommand> for ChunkActor {
     type Result = Result<Pin<Box<dyn Future<Output = ()> + Send + Sync>>, ()>;
 
-    fn handle(&mut self, msg: UpdateCommand, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: UpdateCommand, _ctx: &mut Self::Context) -> Self::Result {
         info!("UpdateCommand({}): {}", self.i, msg.id);
-        self.data = self.data.clone() + &msg.data + "\n";
+        self.data.push_str(&msg.data);
+        self.data.push_str("\n");
         Ok(Box::pin(futures::future::ready(())))
     }
 }
@@ -164,19 +164,19 @@ impl Handler<GetChunk> for ChunkActor {
                 self.data.len(),
                 self.data.clone().len()
             );
-            debug!("{:?}", to_send);
         }
         Ok(to_send)
     }
 }
 
 async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
-    let client = create_client();
+    let client = Arc::new(create_client());
+    let client_copy = client.clone();
 
     fn create_client() -> Client {
         ClientBuilder::new()
-            .timeout(Duration::from_secs(600))
-            .connector(Connector::new().timeout(Duration::from_secs(600)).finish())
+            .timeout(Duration::from_secs(30))
+            .connector(Connector::new().timeout(Duration::from_secs(30)).finish())
             .finish()
     }
 
@@ -192,6 +192,11 @@ async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
     trace!("Got response from stream API: {:?}", response);
     let async_read = response
         .into_stream()
+        .map(|c| {
+            debug!("Stream Body Chunk: {:?}", c);
+            c
+        })
+        .map_err(|e| {error!("Stream error: {:?}", e); e})
         .map_err(|e: PayloadError| Error::new(ErrorKind::Other, format!("{}", e)))
         .into_async_read();
 
@@ -211,57 +216,81 @@ async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
                             }
                         }
                     }
-                    _ => None,
+                    Err(e) => {
+                        error!("Error after decoding: {:?}", e);
+                        None
+                    }
+                    x => {
+                        debug!("Something: {:?}", x);
+                        None
+                    },
                 }
             }
         })
         .filter(|e| futures::future::ready(e.wiki == "wikidatawiki" && e.namespace == 0))
-        .take(10)
-        .then(|event_data| {
+        .map(move |ed| (ed, client_copy.clone()))
+        .then(|(event_data, client)| {
             async {
                 let EventData { title: id, .. } = event_data;
-                let mut result = create_client()
+                let client = client;
+
+                let req = client
                     .get(format!(
                         "https://www.wikidata.org/wiki/Special:EntityData/{}.json",
                         id
-                    ))
-                    .send()
+                    ));
+
+
+                let future_response = req
+                    .send();
+
+                let mut result = future_response
                     .await
                     .unwrap();
-                let body = result.body().await.unwrap();
+
+
+
+                let body: Bytes = result.body().limit(8 * 1024 * 1024).await.expect("Entity response body");
+
 
                 let unser = serde_json::from_slice::<WikidataResponse>(body.as_ref()).unwrap();
-                let value = unser.entities.get(&id).unwrap();
-                let data = serde_json::to_string(value).unwrap();
+                // Entity might be a redirect to another one which will be automatically resolved.
+                // The response will then contains some other entity which should be ignored.
+                let value = unser.entities.get(&id)?;
+
+
+                let data = serde_json::to_string(value).expect(&format!("Serialize {} entity back failed O_o", id));
 
                 let revision = value
                     .as_object()
-                    .unwrap()
+                    .expect(&format!("Entity {} representation was not an object", id))
                     .get("lastrevid")
-                    .unwrap()
+                    .expect(&format!("Entity {} does not contain revision ID", id))
                     .as_u64()
-                    .unwrap();
+                    .expect(&format!("Entity {} revision ID is not a u64", id));
 
-                let id = id[1..].parse().unwrap();
+                let id = id[1..].parse().expect(&format!("Entity {} ", id));
 
-                UpdateCommand {
+                Some(UpdateCommand {
                     entity_type: EntityType::Item,
                     revision,
                     id,
                     data,
-                }
+                })
             }
         })
+        .filter_map(|i| async {i})
 }
 
 use serde::Deserialize;
+use std::sync::Arc;
 
 #[derive(Deserialize, Debug)]
 struct EventData {
     wiki: String,
     title: String,
     namespace: u64,
-    revision: RevisionData,
+    revision: Option<RevisionData>,
 }
 
 #[derive(Deserialize, Debug)]
