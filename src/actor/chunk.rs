@@ -1,10 +1,9 @@
+use crate::actor::UpdateCommand;
+use actix::{Actor, Context, Handler, Message};
+use actix_web::web::Bytes;
+use log::*;
 use std::future::Future;
 use std::pin::Pin;
-use actix::{Handler, Actor, Context, Message};
-use actix_web::web::Bytes;
-use crate::actor::UpdateCommand;
-use log::*;
-
 
 impl Handler<UpdateCommand> for ChunkActor {
     type Result = Result<Pin<Box<dyn Future<Output = ()> + Send + Sync>>, ()>;

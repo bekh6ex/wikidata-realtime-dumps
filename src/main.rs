@@ -1,33 +1,16 @@
 use actix::prelude::*;
 
-use actix_web::{middleware, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
-use bytes::Bytes;
-use futures::stream::*;
 use log::*;
-use std::fmt::Debug;
-use std::pin::Pin;
 
-use actix_web::client::{Client, ClientBuilder, Connector};
-use actix_web::error::PayloadError;
-use futures::io::ErrorKind;
+use futures::{self, StreamExt};
 
-use futures::{self, Stream, StreamExt, TryStreamExt};
-use sse_codec::{decode_stream, Event};
-use std::io::Error;
-
-use std::time::Duration;
-use prelude::*;
-use actor::archive;
-
-use actor::{GetDump, GetDumpResult};
-use crate::events::get_update_stream;
 use crate::actor::archive::ArchiveActor;
+use crate::events::get_update_stream;
 
-mod server;
 mod actor;
 mod events;
 pub mod prelude;
-
+mod server;
 
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {
@@ -57,4 +40,3 @@ async fn main() -> std::io::Result<()> {
     let _ = futures::future::join(stream, server_started).await;
     Ok(())
 }
-

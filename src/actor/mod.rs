@@ -1,9 +1,9 @@
-use std::pin::Pin;
-use actix_web::web::Bytes;
+use super::prelude::*;
 use actix::prelude::Stream;
 use actix::Message;
+use actix_web::web::Bytes;
 use std::future::Future;
-use super::prelude::*;
+use std::pin::Pin;
 
 pub mod archive;
 pub mod chunk;
@@ -15,7 +15,6 @@ pub type GetDumpResult = Result<Pin<Box<dyn Stream<Item = Bytes> + Send + Sync>>
 impl Message for GetDump {
     type Result = GetDumpResult;
 }
-
 
 #[derive(Debug)]
 pub struct UpdateCommand {

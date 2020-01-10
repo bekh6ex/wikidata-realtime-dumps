@@ -1,14 +1,13 @@
-use actix::{Addr, Context, Actor, Handler};
-use crate::actor::{GetDump, GetDumpResult, UpdateCommand};
-use futures::stream::iter;
-use std::future::Future;
-use std::pin::Pin;
-use futures::StreamExt;
-use actix_web::web::Bytes;
-use log::*;
 use super::chunk;
 use crate::actor::chunk::GetChunk;
-
+use crate::actor::{GetDump, GetDumpResult, UpdateCommand};
+use actix::{Actor, Addr, Context, Handler};
+use actix_web::web::Bytes;
+use futures::stream::iter;
+use futures::StreamExt;
+use log::*;
+use std::future::Future;
+use std::pin::Pin;
 
 pub struct ArchiveActor {
     children: Vec<Addr<chunk::ChunkActor>>,
@@ -17,7 +16,9 @@ pub struct ArchiveActor {
 impl ArchiveActor {
     pub fn new() -> ArchiveActor {
         ArchiveActor {
-            children: (0..1000).map(|i| chunk::ChunkActor::new(i).start()).collect(),
+            children: (0..1000)
+                .map(|i| chunk::ChunkActor::new(i).start())
+                .collect(),
         }
     }
 }
@@ -28,7 +29,6 @@ impl Actor for ArchiveActor {
         info!("ArchiveActor started!")
     }
 }
-
 
 impl Handler<GetDump> for ArchiveActor {
     type Result = GetDumpResult;
@@ -41,8 +41,14 @@ impl Handler<GetDump> for ArchiveActor {
                 let b = r.expect("response").expect("Bytes");
                 b
             })
-            .filter_map(|b:Bytes| async {
-                if b.len() == 0 {None} else {Some(b)}
+            .filter_map(|b: Bytes| {
+                async {
+                    if b.len() == 0 {
+                        None
+                    } else {
+                        Some(b)
+                    }
+                }
             });
         Ok(Box::pin(stream))
     }

@@ -1,16 +1,15 @@
-use serde::Deserialize;
-use std::sync::Arc;
-use actix::prelude::Stream;
-use std::time::Duration;
-use actix_web::client::{Client, ClientBuilder, Connector, PayloadError};
-use futures::{TryStreamExt, StreamExt};
-use sse_codec::{decode_stream, Event};
-use actix_web::web::Bytes;
-use std::io::{Error, ErrorKind};
-use log::*;
 use super::prelude::*;
 use crate::actor::UpdateCommand;
-
+use actix::prelude::Stream;
+use actix_web::client::{Client, ClientBuilder, Connector, PayloadError};
+use actix_web::web::Bytes;
+use futures::{StreamExt, TryStreamExt};
+use log::*;
+use serde::Deserialize;
+use sse_codec::{decode_stream, Event};
+use std::io::{Error, ErrorKind};
+use std::sync::Arc;
+use std::time::Duration;
 
 pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
     let client = Arc::new(create_client());
@@ -39,7 +38,10 @@ pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
             debug!("Stream Body Chunk: {:?}", c);
             c
         })
-        .map_err(|e| {error!("Stream error: {:?}", e); e})
+        .map_err(|e| {
+            error!("Stream error: {:?}", e);
+            e
+        })
         .map_err(|e: PayloadError| Error::new(ErrorKind::Other, format!("{}", e)))
         .into_async_read();
 
@@ -66,7 +68,7 @@ pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
                     x => {
                         debug!("Something: {:?}", x);
                         None
-                    },
+                    }
                 }
             }
         })
@@ -77,32 +79,28 @@ pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
                 let EventData { title: id, .. } = event_data;
                 let client = client;
 
-                let req = client
-                    .get(format!(
-                        "https://www.wikidata.org/wiki/Special:EntityData/{}.json",
-                        id
-                    ));
+                let req = client.get(format!(
+                    "https://www.wikidata.org/wiki/Special:EntityData/{}.json",
+                    id
+                ));
 
+                let future_response = req.send();
 
-                let future_response = req
-                    .send();
+                let mut result = future_response.await.unwrap();
 
-                let mut result = future_response
+                let body: Bytes = result
+                    .body()
+                    .limit(8 * 1024 * 1024)
                     .await
-                    .unwrap();
-
-
-
-                let body: Bytes = result.body().limit(8 * 1024 * 1024).await.expect("Entity response body");
-
+                    .expect("Entity response body");
 
                 let unser = serde_json::from_slice::<WikidataResponse>(body.as_ref()).unwrap();
                 // Entity might be a redirect to another one which will be automatically resolved.
                 // The response will then contains some other entity which should be ignored.
                 let value = unser.entities.get(&id)?;
 
-
-                let data = serde_json::to_string(value).expect(&format!("Serialize {} entity back failed O_o", id));
+                let data = serde_json::to_string(value)
+                    .expect(&format!("Serialize {} entity back failed O_o", id));
 
                 let revision = value
                     .as_object()
@@ -122,9 +120,8 @@ pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
                 })
             }
         })
-        .filter_map(|i| async {i})
+        .filter_map(|i| async { i })
 }
-
 
 #[derive(Deserialize, Debug)]
 struct EventData {
