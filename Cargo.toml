@@ -18,3 +18,4 @@ sse-codec = {version="0.1.0", git="https://github.com/bekh6ex/sse-codec.git", br
 serde = "1.0.104"
 serde_json = "1.0.44"
 log = "0.4.8"
+async-std = "1.4.0"

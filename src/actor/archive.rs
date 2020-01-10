@@ -60,8 +60,15 @@ impl Handler<UpdateCommand> for ArchiveActor {
     fn handle(&mut self, item: UpdateCommand, _ctx: &mut Self::Context) -> Self::Result {
         debug!("UpdateCommand[ArchiveActor]: entity_id={}", item.id);
         let child_index = item.id % 1000;
-        let child = self.children.get(child_index as usize).unwrap();
+        let child = self.children.get(child_index as usize).unwrap().clone();
         use futures::future::FutureExt;
-        Ok(Box::pin(child.send(item).map(|_| ())))
+
+        let result = async move {
+            child.send(item).await
+                .expect("Communication with child result failed")
+                .expect("Child failed")
+                .await;
+        };
+        Ok(Box::pin(result))
     }
 }

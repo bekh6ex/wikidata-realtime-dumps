@@ -30,7 +30,12 @@ async fn main() -> std::io::Result<()> {
 
     let stream = update_stream.for_each(|e| {
         async {
-            let _result = archive_actor_for_stream.send(e).await;
+            let result = archive_actor_for_stream.send(e).await
+                .expect("Actor communication failed")
+                .expect("ArchiveActor have failed")
+                .await;
+            // TODO: Should get last event id here
+            debug!("Got update result {:?} ", result);
             ()
         }
     });
