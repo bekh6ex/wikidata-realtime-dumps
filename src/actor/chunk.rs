@@ -33,15 +33,28 @@ impl Handler<UpdateCommand> for ChunkActor {
 
         use async_std::fs;
 
+        use std::io::Write;
+
+        fn gzip(data: String) -> Vec<u8> {
+            use deflate::Compression;
+            use deflate::write::GzEncoder;
+
+            let mut encoder = GzEncoder::new(Vec::new(), Compression::Best);
+            encoder.write_all(data.as_bytes()).unwrap();
+            encoder.finish().unwrap()
+        }
+
         let data_to_write = self.data.clone();
 
+        let compressed_data = gzip(data_to_write);
+
         let dir_path = "/tmp/wd-rt-dumps/chunk";
-        let file_path = format!("/tmp/wd-rt-dumps/chunk/{}", self.i);
+        let file_path = format!("/tmp/wd-rt-dumps/chunk/{}.gz", self.i);
 
         let res = async move {
-            trace!("Writing a file '{}' len={}", file_path, data_to_write.len());
+            trace!("Writing a file '{}' len={}", file_path, compressed_data.len());
             fs::create_dir_all(dir_path).await.expect("Failed to create a directory");
-            fs::write(file_path, data_to_write).await.expect("Writing failed");
+            fs::write(file_path, compressed_data).await.expect("Writing failed");
             ()
         };
 
