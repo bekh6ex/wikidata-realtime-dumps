@@ -98,6 +98,9 @@ impl Handler<GetDump> for ArchiveActor {
             .map(|r| {
                 let b = r.expect("response").expect("Bytes");
                 b
+            })
+            .filter_map(|b:Bytes| async {
+                if b.len() == 0 {None} else {Some(b)}
             });
         Ok(Box::pin(stream))
     }
