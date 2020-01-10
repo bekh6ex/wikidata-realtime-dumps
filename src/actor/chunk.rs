@@ -9,7 +9,7 @@ impl Handler<UpdateCommand> for ChunkActor {
     type Result = Result<Pin<Box<dyn Future<Output = ()> + Send + Sync>>, ()>;
 
     fn handle(&mut self, msg: UpdateCommand, _ctx: &mut Self::Context) -> Self::Result {
-        info!("UpdateCommand({}): {}", self.i, msg.id);
+        debug!("UpdateCommand[actor_id={}]: entity_id={}", self.i, msg.id);
         self.data.push_str(&msg.data);
         self.data.push_str("\n");
         Ok(Box::pin(futures::future::ready(())))

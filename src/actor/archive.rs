@@ -58,7 +58,7 @@ impl Handler<UpdateCommand> for ArchiveActor {
     type Result = Result<Pin<Box<dyn Future<Output = ()> + Send + Sync>>, ()>;
 
     fn handle(&mut self, item: UpdateCommand, _ctx: &mut Self::Context) -> Self::Result {
-        println!("Archive UpdateCommand: {}", item.id);
+        debug!("UpdateCommand[ArchiveActor]: entity_id={}", item.id);
         let child_index = item.id % 1000;
         let child = self.children.get(child_index as usize).unwrap();
         use futures::future::FutureExt;

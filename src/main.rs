@@ -16,7 +16,7 @@ mod server;
 async fn main() -> std::io::Result<()> {
     std::env::set_var(
         "RUST_LOG",
-        "wikidata_realtime_dumps=debug,actix_server=info,actix_web=info",
+        "wikidata_realtime_dumps=info,actix_server=info,actix_web=info",
     );
     env_logger::init();
 

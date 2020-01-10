@@ -35,14 +35,14 @@ pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
     let async_read = response
         .into_stream()
         .map(|c| {
-            debug!("Stream Body Chunk: {:?}", c);
+            trace!("Stream Body Chunk: {:?}", c);
             c
         })
         .map_err(|e| {
             error!("Stream error: {:?}", e);
             e
         })
-        .map_err(|e: PayloadError| Error::new(ErrorKind::Other, format!("{}", e)))
+        .map_err(|e: PayloadError| Error::new(ErrorKind::Other, format!("{:?}", e)))
         .into_async_read();
 
     decode_stream(async_read)
@@ -52,8 +52,8 @@ pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
 
                 match event {
                     Ok(Event::Message { data, .. }) => {
-                        let data1: Result<EventData> = serde_json::from_str(&data);
-                        match data1 {
+                        let data: Result<EventData> = serde_json::from_str(&data);
+                        match data {
                             Ok(result) => Some(result),
                             Err(e) => {
                                 error!("{:?}", e);
@@ -66,7 +66,7 @@ pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
                         None
                     }
                     x => {
-                        debug!("Something: {:?}", x);
+                        trace!("Something: {:?}", x);
                         None
                     }
                 }
