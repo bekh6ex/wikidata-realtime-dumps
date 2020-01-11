@@ -3,9 +3,11 @@ use crate::actor::UpdateCommand;
 use actix::prelude::Stream;
 use actix_web::client::{Client, ClientBuilder, Connector, PayloadError};
 use actix_web::web::Bytes;
+use futures::future::ready;
 use futures::{StreamExt, TryStreamExt};
 use log::*;
 use serde::Deserialize;
+use serde_json::Value;
 use sse_codec::{decode_stream, Event};
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
@@ -13,7 +15,7 @@ use std::time::Duration;
 
 pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
     let client = Arc::new(create_client());
-    let client_copy = client.clone();
+    let client_for_entities = client.clone();
 
     fn create_client() -> Client {
         ClientBuilder::new()
@@ -46,6 +48,12 @@ pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
         .into_async_read();
 
     decode_stream(async_read)
+        .take_while(|decoding_result| {
+            if decoding_result.is_err() {
+                error!("Error after decoding: {:?}", decoding_result)
+            }
+            ready(decoding_result.is_ok())
+        })
         .filter_map(|event| {
             async move {
                 use serde_json::Result;
@@ -61,10 +69,6 @@ pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
                             }
                         }
                     }
-                    Err(e) => {
-                        error!("Error after decoding: {:?}", e);
-                        None
-                    }
                     x => {
                         trace!("Something: {:?}", x);
                         None
@@ -72,21 +76,22 @@ pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
                 }
             }
         })
-        .filter(|e| futures::future::ready(e.wiki == "wikidatawiki" && e.namespace == 0))
-        .map(move |ed| (ed, client_copy.clone()))
-        .then(|(event_data, client)| {
+        .filter(|e| ready(e.wiki == "wikidatawiki" && e.namespace == 0))
+        .filter_map(move |event_data| {
+            let client = client_for_entities.clone();
             async {
                 let EventData { title: id, .. } = event_data;
-                let client = client;
 
+                let client = client;
                 let req = client.get(format!(
                     "https://www.wikidata.org/wiki/Special:EntityData/{}.json",
                     id
                 ));
 
-                let future_response = req.send();
-
-                let mut result = future_response.await.unwrap();
+                let mut result = req
+                    .send()
+                    .await
+                    .expect(&format!("Didn't get the response: {}", &id));
 
                 let body: Bytes = result
                     .body()
@@ -94,7 +99,12 @@ pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
                     .await
                     .expect("Entity response body");
 
-                let unser = serde_json::from_slice::<WikidataResponse>(body.as_ref()).unwrap();
+                let unser =
+                    serde_json::from_slice::<WikidataResponse>(body.as_ref()).expect(&format!(
+                        "Invalid response format: {}\n{:?}",
+                        &id,
+                        std::str::from_utf8(body.as_ref())
+                    ));
                 // Entity might be a redirect to another one which will be automatically resolved.
                 // The response will then contains some other entity which should be ignored.
                 let value = unser.entities.get(&id)?;
@@ -102,13 +112,7 @@ pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
                 let data = serde_json::to_string(value)
                     .expect(&format!("Serialize {} entity back failed O_o", id));
 
-                let revision = value
-                    .as_object()
-                    .expect(&format!("Entity {} representation was not an object", id))
-                    .get("lastrevid")
-                    .expect(&format!("Entity {} does not contain revision ID", id))
-                    .as_u64()
-                    .expect(&format!("Entity {} revision ID is not a u64", id));
+                let revision = extract_revision_id(&id, value);
 
                 let id = id[1..].parse().expect(&format!("Entity {} ", id));
 
@@ -120,7 +124,16 @@ pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
                 })
             }
         })
-        .filter_map(|i| async { i })
+}
+
+fn extract_revision_id(id: &String, value: &Value) -> u64 {
+    value
+        .as_object()
+        .expect(&format!("Entity {} representation was not an object", id))
+        .get("lastrevid")
+        .expect(&format!("Entity {} does not contain revision ID", id))
+        .as_u64()
+        .expect(&format!("Entity {} revision ID is not a u64", id))
 }
 
 #[derive(Deserialize, Debug)]
