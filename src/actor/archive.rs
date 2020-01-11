@@ -1,8 +1,7 @@
 use super::chunk;
-use crate::actor::chunk::GetChunk;
+use crate::actor::chunk::{GetChunk, GetChunkResult};
 use crate::actor::{GetDump, GetDumpResult, UpdateCommand};
 use actix::{Actor, Addr, Context, Handler};
-use actix_web::web::Bytes;
 use futures::stream::iter;
 use futures::StreamExt;
 use log::*;
@@ -38,11 +37,12 @@ impl Handler<GetDump> for ArchiveActor {
             .map(|c| c.send(GetChunk))
             .buffer_unordered(6)
             .map(|r| {
-                let b = r.expect("response").expect("Bytes");
+                let b: GetChunkResult = r.expect("Actor communication issue");
                 b
             })
-            .filter_map(|b: Bytes| {
+            .filter_map(|b: GetChunkResult| {
                 async {
+                    let b = b.expect("Failed to get chunk").await;
                     if b.len() == 0 {
                         None
                     } else {
@@ -61,10 +61,11 @@ impl Handler<UpdateCommand> for ArchiveActor {
         debug!("UpdateCommand[ArchiveActor]: entity_id={}", item.id);
         let child_index = item.id % 1000;
         let child = self.children.get(child_index as usize).unwrap().clone();
-        use futures::future::FutureExt;
 
         let result = async move {
-            child.send(item).await
+            child
+                .send(item)
+                .await
                 .expect("Communication with child result failed")
                 .expect("Child failed")
                 .await;

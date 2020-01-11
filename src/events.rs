@@ -93,6 +93,7 @@ pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
                     .await
                     .expect(&format!("Didn't get the response: {}", &id));
 
+                // TODO: Check for 200 status
                 let body: Bytes = result
                     .body()
                     .limit(8 * 1024 * 1024)
