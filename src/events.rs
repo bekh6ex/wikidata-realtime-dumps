@@ -83,6 +83,7 @@ pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
                 let EventData { title: id, .. } = event_data;
 
                 let client = client;
+                // TODO Send Accept header
                 let req = client.get(format!(
                     "https://www.wikidata.org/wiki/Special:EntityData/{}.json",
                     id
