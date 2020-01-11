@@ -4,14 +4,11 @@ use actix_web::web::Bytes;
 use log::*;
 use std::future::Future;
 use std::pin::Pin;
-use futures::FutureExt;
-
 
 pub struct ChunkActor {
     i: i32,
     data: String,
 }
-
 
 impl ChunkActor {
     pub fn new(i: i32) -> ChunkActor {
@@ -21,7 +18,6 @@ impl ChunkActor {
         }
     }
 }
-
 
 impl Handler<UpdateCommand> for ChunkActor {
     type Result = Result<Pin<Box<dyn Future<Output = ()> + Send + Sync>>, ()>;
@@ -36,8 +32,8 @@ impl Handler<UpdateCommand> for ChunkActor {
         use std::io::Write;
 
         fn gzip(data: String) -> Vec<u8> {
-            use deflate::Compression;
             use deflate::write::GzEncoder;
+            use deflate::Compression;
 
             let mut encoder = GzEncoder::new(Vec::new(), Compression::Best);
             encoder.write_all(data.as_bytes()).unwrap();
@@ -52,9 +48,17 @@ impl Handler<UpdateCommand> for ChunkActor {
         let file_path = format!("/tmp/wd-rt-dumps/chunk/{}.gz", self.i);
 
         let res = async move {
-            trace!("Writing a file '{}' len={}", file_path, compressed_data.len());
-            fs::create_dir_all(dir_path).await.expect("Failed to create a directory");
-            fs::write(file_path, compressed_data).await.expect("Writing failed");
+            trace!(
+                "Writing a file '{}' len={}",
+                file_path,
+                compressed_data.len()
+            );
+            fs::create_dir_all(dir_path)
+                .await
+                .expect("Failed to create a directory");
+            fs::write(file_path, compressed_data)
+                .await
+                .expect("Writing failed");
             ()
         };
 
