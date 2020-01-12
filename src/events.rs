@@ -1,13 +1,13 @@
 use super::prelude::*;
 use crate::actor::UpdateCommand;
+use crate::get_entity::get_entity;
 use actix::prelude::Stream;
 use actix_web::client::{Client, ClientBuilder, Connector, PayloadError};
-use actix_web::web::Bytes;
 use futures::future::ready;
 use futures::{StreamExt, TryStreamExt};
 use log::*;
 use serde::Deserialize;
-use serde_json::Value;
+
 use sse_codec::{decode_stream, Event};
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
@@ -76,66 +76,21 @@ pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
                 }
             }
         })
-        .filter(|e| ready(e.wiki == "wikidatawiki" && e.namespace == 0))
+        .filter(|e| {
+            ready(e.wiki == "wikidatawiki" && e.namespace == EntityType::Property.namespace().n())
+        })
         .filter_map(move |event_data| {
             let client = client_for_entities.clone();
             async {
-                let EventData { title: id, .. } = event_data;
+                let EventData { title, .. } = event_data;
+                let id = EntityType::Property.parse_from_title(&title).unwrap();
 
                 let client = client;
-                // TODO Send Accept header
-                let req = client.get(format!(
-                    "https://www.wikidata.org/wiki/Special:EntityData/{}.json",
-                    id
-                ));
 
-                let mut result = req
-                    .send()
-                    .await
-                    .expect(&format!("Didn't get the response: {}", &id));
-
-                // TODO: Check for 200 status
-                let body: Bytes = result
-                    .body()
-                    .limit(8 * 1024 * 1024)
-                    .await
-                    .expect("Entity response body");
-
-                let unser =
-                    serde_json::from_slice::<WikidataResponse>(body.as_ref()).expect(&format!(
-                        "Invalid response format: {}\n{:?}",
-                        &id,
-                        std::str::from_utf8(body.as_ref())
-                    ));
-                // Entity might be a redirect to another one which will be automatically resolved.
-                // The response will then contains some other entity which should be ignored.
-                let value = unser.entities.get(&id)?;
-
-                let data = serde_json::to_string(value)
-                    .expect(&format!("Serialize {} entity back failed O_o", id));
-
-                let revision = extract_revision_id(&id, value);
-
-                let id = id[1..].parse().expect(&format!("Entity {} ", id));
-
-                Some(UpdateCommand {
-                    entity_type: EntityType::Item,
-                    revision,
-                    id,
-                    data,
-                })
+                let entity_result = get_entity(client, id).await?;
+                Some(entity_result.into())
             }
         })
-}
-
-fn extract_revision_id(id: &String, value: &Value) -> u64 {
-    value
-        .as_object()
-        .expect(&format!("Entity {} representation was not an object", id))
-        .get("lastrevid")
-        .expect(&format!("Entity {} does not contain revision ID", id))
-        .as_u64()
-        .expect(&format!("Entity {} revision ID is not a u64", id))
 }
 
 #[derive(Deserialize, Debug)]
@@ -144,7 +99,7 @@ struct EventData {
     title: String,
     #[serde(rename(deserialize = "type"))]
     event_type: String,
-    namespace: u64,
+    namespace: u32,
     revision: Option<RevisionData>,
 }
 

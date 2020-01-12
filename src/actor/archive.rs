@@ -59,7 +59,7 @@ impl Handler<UpdateCommand> for ArchiveActor {
 
     fn handle(&mut self, item: UpdateCommand, _ctx: &mut Self::Context) -> Self::Result {
         debug!("UpdateCommand[ArchiveActor]: entity_id={}", item.id);
-        let child_index = item.id % 1000;
+        let child_index = item.id.n() % 1000;
         let child = self.children.get(child_index as usize).unwrap().clone();
 
         let result = async move {

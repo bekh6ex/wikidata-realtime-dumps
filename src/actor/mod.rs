@@ -18,11 +18,11 @@ impl Message for GetDump {
 
 #[derive(Debug)]
 pub struct UpdateCommand {
-    pub entity_type: EntityType,
-    pub id: u64,
-    pub revision: u64,
+    pub id: EntityId,
+    pub revision: RevisionId,
     pub data: String,
 }
+
 impl Message for UpdateCommand {
     type Result = Result<Pin<Box<dyn Future<Output = ()> + Send + Sync>>, ()>;
 }
