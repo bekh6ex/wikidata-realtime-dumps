@@ -14,7 +14,7 @@ pub async fn start(archive_actor: Addr<ArchiveActor>) -> std::io::Result<()> {
             .service(web::resource("/").to(handle_request))
     })
     .bind("127.0.0.1:8080")?
-    //    .workers(3)
+    .workers(3)
     .run()
     .await
 }

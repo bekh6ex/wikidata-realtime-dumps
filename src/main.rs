@@ -37,7 +37,8 @@ async fn main() -> std::io::Result<()> {
     let archive_actor_for_stream = archive_actor.clone();
 
     let send_forward = |e: UpdateCommand| {
-        async {
+        let archive_actor_for_stream = archive_actor_for_stream.clone();
+        async_std::task::spawn(async move {
             let result = archive_actor_for_stream
                 .send(e)
                 .await
@@ -47,11 +48,11 @@ async fn main() -> std::io::Result<()> {
             // TODO: Should get last event id here
             debug!("Got update result {:?} ", result);
             ()
-        }
+        })
     };
 
     let update_stream = update_stream.for_each(send_forward);
-    let init_stream = init_stream.for_each(send_forward);
+    let init_stream = init_stream.for_each_concurrent(16, send_forward);
 
     let server_started = server::start(archive_actor);
 

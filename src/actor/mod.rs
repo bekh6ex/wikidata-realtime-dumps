@@ -26,3 +26,13 @@ pub struct UpdateCommand {
 impl Message for UpdateCommand {
     type Result = Result<Pin<Box<dyn Future<Output = ()> + Send + Sync>>, ()>;
 }
+
+pub struct UpdateChunkCommand {
+    pub id: EntityId,
+    pub revision: RevisionId,
+    pub data: String,
+}
+
+impl Message for UpdateChunkCommand {
+    type Result = Result<(), ()>;
+}

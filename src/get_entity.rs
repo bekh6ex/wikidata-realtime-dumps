@@ -1,48 +1,109 @@
 use crate::actor::UpdateCommand;
 use crate::prelude::*;
-use actix_web::client::Client;
+use actix_web::client::{Client, SendRequestError};
+use actix_web::error::PayloadError;
 use actix_web::http::StatusCode;
 use actix_web::web::Bytes;
+use log::*;
 use serde::Deserialize;
 use serde_json::Value;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Duration;
 
 pub async fn get_entity(client: Arc<Client>, id: EntityId) -> Option<GetEntityResult> {
+    with_retries(client, id, 1)
+        .await
+        .expect("Failed to get entity")
+}
+
+fn with_retries(
+    client: Arc<Client>,
+    id: EntityId,
+    try_number: u8,
+) -> Pin<Box<dyn Future<Output = Result<Option<GetEntityResult>, Error>>>> {
+    Box::pin(async move {
+        const MAX_TRIES: u8 = 5;
+
+        let r = get_entity_internal(client.clone(), id).await;
+
+        match r {
+            Ok(result) => Ok(result),
+            Err(err) => {
+                warn!("Get entity failed. try={} {:?}", try_number, err);
+                if try_number >= MAX_TRIES {
+                    Err(err)
+                } else {
+                    let timeout = 500 + 10_u64.pow(try_number as u32);
+                    async_std::task::sleep(Duration::from_millis(timeout)).await;
+                    with_retries(client, id, try_number + 1).await
+                }
+            }
+        }
+    })
+}
+
+async fn get_entity_internal(
+    client: Arc<Client>,
+    id: EntityId,
+) -> Result<Option<GetEntityResult>, Error> {
     let req = client.get(format!(
         "https://www.wikidata.org/wiki/Special:EntityData/{}.json",
         id
     ));
 
-    let mut response = req
-        .send()
-        .await
-        .expect(&format!("Didn't get the response: {}", &id));
+    debug!("Sending get entity request. id={}", id);
+    let mut response = req.send().await.map_err(|e| Error::GetResponse(e))?;
+
+    debug!(
+        "Got entity response. status={} id={}",
+        response.status(),
+        id
+    );
 
     if response.status() == StatusCode::NOT_FOUND {
-        return None;
+        return Ok(None);
     }
 
     let body: Bytes = response
         .body()
         .limit(8 * 1024 * 1024)
         .await
-        .expect("Entity response body");
+        .map_err(|e| Error::GetResponseBody(e))?;
 
-    let response = serde_json::from_slice::<WikidataResponse>(body.as_ref()).expect(&format!(
-        "Invalid response format: {}\n{:?}",
-        &id,
-        std::str::from_utf8(body.as_ref())
-    ));
+    let response = serde_json::from_slice::<WikidataResponse>(body.as_ref()).map_err(|e| {
+        Error::ResponseFormat {
+            cause: e,
+            body: std::str::from_utf8(body.as_ref()).unwrap().to_owned(),
+        }
+    })?;
+
     // Entity might be a redirect to another one which will be automatically resolved.
     // The response will then contains some other entity which should be ignored.
-    let value = response.entities.get(&id.to_string())?;
+    let value = response.entities.get(&id.to_string());
+    if value.is_none() {
+        return Ok(None);
+    }
+
+    let value = value.unwrap();
 
     let data =
         serde_json::to_string(value).expect(&format!("Serialize {} entity back failed O_o", id));
 
     let revision = RevisionId(extract_revision_id(id, value));
 
-    Some(GetEntityResult { id, revision, data })
+    Ok(Some(GetEntityResult { id, revision, data }))
+}
+
+#[derive(Debug)]
+enum Error {
+    GetResponse(SendRequestError),
+    GetResponseBody(PayloadError),
+    ResponseFormat {
+        cause: serde_json::Error,
+        body: String,
+    },
 }
 
 fn extract_revision_id(id: EntityId, value: &Value) -> u64 {

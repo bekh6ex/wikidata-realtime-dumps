@@ -1,11 +1,12 @@
-use crate::actor::UpdateCommand;
+use crate::actor::{UpdateChunkCommand};
 use actix::{Actor, Context, Handler, Message};
 use actix_web::web::Bytes;
-use futures::FutureExt;
+
 use log::*;
-use std::future::Future;
+
 use std::io;
-use std::pin::Pin;
+
+
 
 pub struct ChunkActor {
     i: i32,
@@ -24,16 +25,16 @@ impl ChunkActor {
         format!("{}/{}.gz", self.dir_path, self.i)
     }
 
-    fn load(&self) -> impl Future<Output = GzippedData> {
-        use async_std::fs;
+    fn load(&self) -> GzippedData {
+        use std::fs;
 
         let file_path = self.file_path();
         let file_path1 = self.file_path();
 
-        async move {
+        {
             trace!("Reading a file '{}'", file_path);
 
-            let read_result: io::Result<_> = fs::read(file_path).await;
+            let read_result: io::Result<_> = fs::read(file_path);
 
             if read_result.is_err() {
                 // TODO Match the error
@@ -50,47 +51,59 @@ impl ChunkActor {
         }
     }
 
-    fn store(index: i32, data: GzippedData) -> impl Future<Output = ()> {
-        use async_std::fs;
+    fn store(index: i32, data: GzippedData) {
+        use std::fs;
         let dir_path = "/tmp/wd-rt-dumps/chunk";
         let file_path = format!("/tmp/wd-rt-dumps/chunk/{}.gz", index);
 
-        async move {
+        {
             trace!("Writing a file '{}' len={}", file_path, data.len());
-            fs::create_dir_all(dir_path)
-                .await
-                .expect("Failed to create a directory");
-            fs::write(file_path, data).await.expect("Writing failed");
+            fs::create_dir_all(dir_path).expect("Failed to create a directory");
+            fs::write(file_path, data).expect("Writing failed");
         }
     }
 }
 
-impl Handler<UpdateCommand> for ChunkActor {
-    type Result = Result<Pin<Box<dyn Future<Output = ()> + Send + Sync>>, ()>;
+impl Handler<UpdateChunkCommand> for ChunkActor {
+    type Result = Result<(), ()>;
 
-    fn handle(&mut self, msg: UpdateCommand, _ctx: &mut Self::Context) -> Self::Result {
-        debug!("UpdateCommand[actor_id={}]: entity_id={}", self.i, msg.id);
+    fn handle(&mut self, msg: UpdateChunkCommand, _ctx: &mut Self::Context) -> Self::Result {
+        let thread = {
+            let thread1 = std::thread::current();
+            thread1.name().unwrap_or("<unknown>").to_owned()
+        };
+
+        debug!(
+            "thread={} UpdateCommand[actor_id={}]: entity_id={}",
+            thread, self.i, msg.id
+        );
 
         let data = self.load();
         let index = self.i;
 
-        let res = async move {
-            let mut data = data.await.decompress();
+        let res = {
+            let mut data = data.decompress();
             data.push_str(&msg.data);
             data.push_str("\n");
 
-            Self::store(index, GzippedData::compress(&data)).await
+            let thread1 = {
+                let thread1 = std::thread::current();
+                thread1.name().unwrap_or("<unknown>").to_owned()
+            };
+
+            debug!("thread={} Will store, i={}", thread1, index);
+            let r = Self::store(index, GzippedData::compress(&data));
+            debug!("Done storing");
+            r
         };
 
-        //        let res = self.store(GzippedData::compress(&self.data));
-
-        Ok(Box::pin(res))
+        Ok(res)
     }
 }
 
 pub(super) struct GetChunk;
 
-pub type GetChunkResult = Result<Pin<Box<dyn Future<Output = Bytes> + Send + Sync>>, ()>;
+pub type GetChunkResult = Result<Bytes, ()>;
 
 impl Message for GetChunk {
     type Result = GetChunkResult;
@@ -100,8 +113,11 @@ impl Handler<GetChunk> for ChunkActor {
     type Result = GetChunkResult;
 
     fn handle(&mut self, _msg: GetChunk, _ctx: &mut Self::Context) -> Self::Result {
-        let res = self.load().map(|d| d.to_bytes());
-        Ok(Box::pin(res))
+        let thread1 = std::thread::current();
+        let thread = thread1.name().unwrap_or("<unknown>").to_owned();
+        debug!("thread={} Get chunk: i={}", thread, self.i);
+        let res = self.load().to_bytes();
+        Ok(res)
     }
 }
 

@@ -24,7 +24,7 @@ pub async fn init(ty: EntityType) -> impl Stream<Item = UpdateCommand> {
     iter(1..max)
         .map(move |n| ty.id(n))
         .map(move |id| get_entity(client.clone(), id))
-        .buffered(5)
+        .buffer_unordered(16)
         .filter_map(|e: Option<GetEntityResult>| ready(e.map(|e| e.into())))
 }
 
@@ -83,7 +83,13 @@ async fn get_latest_entity_id(ty: EntityType) -> EntityId {
 fn create_client() -> Client {
     ClientBuilder::new()
         .timeout(Duration::from_secs(30))
-        .connector(Connector::new().timeout(Duration::from_secs(30)).finish())
+        .disable_redirects()
+        .connector(
+            Connector::new()
+                .timeout(Duration::from_secs(30))
+                .conn_lifetime(Duration::from_secs(5 * 60))
+                .finish(),
+        )
         .finish()
 }
 
