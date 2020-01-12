@@ -142,6 +142,8 @@ fn extract_revision_id(id: &String, value: &Value) -> u64 {
 struct EventData {
     wiki: String,
     title: String,
+    #[serde(rename(deserialize = "type"))]
+    event_type: String,
     namespace: u64,
     revision: Option<RevisionData>,
 }
