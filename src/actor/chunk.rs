@@ -1,12 +1,10 @@
-use crate::actor::{UpdateChunkCommand};
+use crate::actor::UpdateChunkCommand;
 use actix::{Actor, Context, Handler, Message};
 use actix_web::web::Bytes;
 
 use log::*;
 
 use std::io;
-
-
 
 pub struct ChunkActor {
     i: i32,
