@@ -1,10 +1,15 @@
 use crate::actor::UpdateChunkCommand;
 use actix::{Actor, Context, Handler, Message};
 use actix_web::web::Bytes;
+use super::SerializedEntity;
 
 use log::*;
 
 use std::io;
+use serde_json;
+use serde;
+use crate::prelude::{EntityType, RevisionId, EntityId};
+use std::collections::BTreeMap;
 
 pub struct ChunkActor {
     i: i32,
@@ -76,13 +81,32 @@ impl Handler<UpdateChunkCommand> for ChunkActor {
             thread, self.i, msg.id
         );
 
-        let data = self.load();
+        let UpdateChunkCommand {
+            id,
+            revision,
+            data,
+        } = msg;
+        let new = SerializedEntity{id,
+            revision,
+            data
+        };
+
+        let gzipped_data = self.load();
         let index = self.i;
 
         let res = {
-            let mut data = data.decompress();
-            data.push_str(&msg.data);
-            data.push_str("\n");
+
+            let data = gzipped_data.change(EntityType::Property, move |mut entities: BTreeMap<EntityId, SerializedEntity>| {
+                if entities.contains_key(&id) {
+                    entities.remove(&id);
+                    // TODO: Check revision
+                    entities.insert(id, new);
+                } else {
+                    entities.insert(id, new);
+                }
+
+                entities
+            });
 
             let thread1 = {
                 let thread1 = std::thread::current();
@@ -90,7 +114,7 @@ impl Handler<UpdateChunkCommand> for ChunkActor {
             };
 
             debug!("thread={} Will store, i={}", thread1, index);
-            let r = Self::store(index, GzippedData::compress(&data));
+            let r = Self::store(index, data);
             debug!("Done storing");
             r
         };
@@ -148,6 +172,38 @@ impl GzippedData {
         let mut s = String::with_capacity(self.inner.len() * 3);
         d.read_to_string(&mut s).expect("Incorrect GZip format");
         s
+    }
+
+    fn change<F>(&self, ty: EntityType, f: F) -> Self
+    where F: FnOnce(BTreeMap<EntityId, SerializedEntity>) -> BTreeMap<EntityId, SerializedEntity> {
+        let entities = {
+            self.decompress().split("\n")
+                .filter(|l| !l.is_empty())
+                .map(|e: &str| {
+                    #[derive(serde::Deserialize)]
+                    struct Entity {
+                        id: String,
+                        lastrevid: u64,
+                    }
+
+                    let entity = serde_json::from_str::<Entity>(&e).expect("Failed to unserialize");
+                    let id = ty.parse_id(&entity.id).unwrap();
+                    let revision = RevisionId(entity.lastrevid);
+
+                    SerializedEntity {id, revision, data: e.to_owned()}
+                })
+                .map(|e| (e.id, e))
+                .collect::<BTreeMap<EntityId, SerializedEntity>>()
+        };
+
+        let entities = f(entities);
+
+        let entities = entities.iter().map(|(_,e)| {
+            let SerializedEntity {data, ..} = e;
+            &data[..]
+        }).collect::<Vec<_>>().join("\n") + "\n";
+
+        Self::compress(&entities)
     }
 
     fn from_binary(data: Vec<u8>) -> GzippedData {

@@ -3,7 +3,7 @@ use serde::export::fmt::Error;
 use serde::export::Formatter;
 use std::fmt::Display;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub enum EntityType {
     Item,
     Property,
@@ -56,7 +56,7 @@ impl EntityType {
         }
     }
 
-    fn parse_id(&self, s: &str) -> Option<EntityId> {
+    pub fn parse_id(&self, s: &str) -> Option<EntityId> {
         if s.len() == 0 {
             error!("Cannot parse empty ID: type={:?}", self);
             return None;
@@ -77,7 +77,7 @@ impl EntityType {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub struct EntityId {
     ty: EntityType,
     id: u32,
@@ -97,7 +97,7 @@ impl Display for EntityId {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct RevisionId(pub u64);
 
 #[derive(Debug)]

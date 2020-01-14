@@ -33,6 +33,12 @@ pub struct UpdateChunkCommand {
     pub data: String,
 }
 
+pub struct SerializedEntity {
+    pub id: EntityId,
+    pub revision: RevisionId,
+    pub data: String,
+}
+
 impl Message for UpdateChunkCommand {
     type Result = Result<(), ()>;
 }

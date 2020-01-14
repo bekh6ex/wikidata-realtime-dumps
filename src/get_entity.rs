@@ -11,12 +11,17 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub async fn get_entity(client: Arc<Client>, id: EntityId) -> Option<GetEntityResult> {
     with_retries(client, id, 1)
         .await
         .expect("Failed to get entity")
 }
+
+const TIMEOUT: AtomicU64 = AtomicU64::new(10);
+const TIMEOUT_INCR: f32 = 1.3;
+const TIMEOUT_REDUCE: f32 = 0.95;
 
 fn with_retries(
     client: Arc<Client>,
@@ -28,20 +33,38 @@ fn with_retries(
 
         let r = get_entity_internal(client.clone(), id).await;
 
+        use Error::*;
+        use actix_web::client::SendRequestError::*;
         match r {
-            Ok(result) => Ok(result),
+            Ok(result) =>  {
+                change_timeout(TIMEOUT_REDUCE);
+                Ok(result)
+            },
+            Err(GetResponse(H2(err))) => {
+                let timeout = change_timeout(TIMEOUT_INCR);
+                info!("Got connection error {:?}. Waiting {}ms and retrying", err, timeout);
+                async_std::task::sleep(Duration::from_millis(timeout)).await;
+                with_retries(client, id, try_number).await
+            }
             Err(err) => {
                 warn!("Get entity failed. try={} {:?}", try_number, err);
                 if try_number >= MAX_TRIES {
                     Err(err)
                 } else {
-                    let timeout = 500 + 10_u64.pow(try_number as u32);
+                    let timeout = change_timeout(TIMEOUT_INCR);
                     async_std::task::sleep(Duration::from_millis(timeout)).await;
                     with_retries(client, id, try_number + 1).await
                 }
             }
         }
     })
+}
+
+fn change_timeout(factor: f32) -> u64 {
+    let timeout = TIMEOUT.load(Ordering::Relaxed);
+    let timeout: f32 = timeout as f32 * factor;
+    TIMEOUT.store(timeout as u64, Ordering::Relaxed);
+    timeout as u64
 }
 
 async fn get_entity_internal(
@@ -97,7 +120,7 @@ async fn get_entity_internal(
 }
 
 #[derive(Debug)]
-enum Error {
+pub enum Error {
     GetResponse(SendRequestError),
     GetResponseBody(PayloadError),
     ResponseFormat {

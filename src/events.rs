@@ -15,6 +15,8 @@ use crate::get_entity::get_entity;
 
 use super::prelude::*;
 
+const WIKIDATA: &str = "wikidatawiki";
+
 fn create_client() -> Client {
     ClientBuilder::new()
         .timeout(Duration::from_secs(30))
@@ -24,7 +26,6 @@ fn create_client() -> Client {
 
 async fn create_stream() -> impl Stream<Item = Event> {
     let client = Arc::new(create_client());
-    let _client_for_entities = client.clone();
 
     let response = client
         .get("https://stream.wikimedia.org/v2/stream/recentchange")
@@ -63,7 +64,7 @@ pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
     let client_for_entities = Arc::new(create_client());
 
     continuous_stream::ContinuousStream::new(
-        |_| futures::stream::once(create_stream()).flatten().take(5),
+        |_| futures::stream::once(create_stream()).flatten(),
         1000,
     )
     .filter_map(|event| {
@@ -86,7 +87,7 @@ pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
         }
     })
     .filter(|e| {
-        ready(e.wiki == "wikidatawiki" && e.namespace == EntityType::Property.namespace().n())
+        ready(e.wiki == WIKIDATA && e.namespace == EntityType::Property.namespace().n())
     })
     .filter_map(move |event_data| {
         let client = client_for_entities.clone();
@@ -156,7 +157,6 @@ mod continuous_stream {
                 last_event_id,
                 retry_interval_ms: 0,
             }
-            //            unimplemented!()
         }
 
         fn wrap_stream<St1: Stream + 'static>(
