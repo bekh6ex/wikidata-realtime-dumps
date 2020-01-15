@@ -86,9 +86,7 @@ pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
             }
         }
     })
-    .filter(|e| {
-        ready(e.wiki == WIKIDATA && e.namespace == EntityType::Property.namespace().n())
-    })
+    .filter(|e| ready(e.wiki == WIKIDATA && e.namespace == EntityType::Property.namespace().n()))
     .filter_map(move |event_data| {
         let client = client_for_entities.clone();
         async {
@@ -126,7 +124,7 @@ mod continuous_stream {
         FilterMap<Chained<X>, Ready<Option<X>>, fn(Option<X>) -> Ready<Option<X>>>;
     type WrapStreamResult<X> = Flatten<StreamOfStream<X>>;
 
-//    type WrapStreamResultBoxed<X: Stream> = Box<dyn Stream<Item = X::Item> + Sync + Send>;
+    //    type WrapStreamResultBoxed<X: Stream> = Box<dyn Stream<Item = X::Item> + Sync + Send>;
 
     pub struct ContinuousStream<St: Stream + 'static, Cr> {
         stream: WrapStreamResult<St>,

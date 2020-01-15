@@ -9,9 +9,9 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 pub async fn get_entity(client: Arc<Client>, id: EntityId) -> Option<GetEntityResult> {
     with_retries(client, id, 1)
@@ -33,16 +33,19 @@ fn with_retries(
 
         let r = get_entity_internal(client.clone(), id).await;
 
-        use Error::*;
         use actix_web::client::SendRequestError::*;
+        use Error::*;
         match r {
-            Ok(result) =>  {
+            Ok(result) => {
                 change_timeout(TIMEOUT_REDUCE);
                 Ok(result)
-            },
+            }
             Err(GetResponse(H2(err))) => {
                 let timeout = change_timeout(TIMEOUT_INCR);
-                info!("Got connection error {:?}. Waiting {}ms and retrying", err, timeout);
+                info!(
+                    "Got connection error {:?}. Waiting {}ms and retrying",
+                    err, timeout
+                );
                 async_std::task::sleep(Duration::from_millis(timeout)).await;
                 with_retries(client, id, try_number).await
             }

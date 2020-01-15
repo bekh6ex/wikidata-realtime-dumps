@@ -1,26 +1,31 @@
-use crate::prelude::{EntityType, EntityId, RevisionId};
-use std::io;
-use std::path::Path;
+use crate::actor::SerializedEntity;
+use crate::prelude::{EntityId, EntityType, RevisionId};
+use actix_web::web::Bytes;
 use log::*;
 use std::collections::BTreeMap;
-use crate::actor::SerializedEntity;
-use actix_web::web::Bytes;
+use std::io;
+use std::path::Path;
 
 pub struct GzChunkStorage<P: AsRef<Path>> {
     ty: EntityType,
-    path: P
+    path: P,
 }
 
 impl<P: AsRef<Path>> GzChunkStorage<P> {
     pub fn new(ty: EntityType, path: P) -> Self {
-        GzChunkStorage {
-            ty,
-            path,
-        }
+        GzChunkStorage { ty, path }
     }
 
     fn file_path(&self) -> &Path {
         self.path.as_ref()
+    }
+
+    pub fn change<F>(&self, f: F)
+    where
+        F: FnOnce(BTreeMap<EntityId, SerializedEntity>) -> BTreeMap<EntityId, SerializedEntity>,
+    {
+        let data = self.load().change(self.ty, f);
+        self.store(data);
     }
 
     pub fn load(&self) -> GzippedData {
@@ -49,25 +54,32 @@ impl<P: AsRef<Path>> GzChunkStorage<P> {
         }
     }
 
-    pub fn store(&self, data: GzippedData) {
+    fn store(&self, data: GzippedData) {
         use std::fs;
-        let dir_path = self.path.as_ref().parent().expect("Expected file with parent");
+        let dir_path = self
+            .path
+            .as_ref()
+            .parent()
+            .expect("Expected file with parent");
 
         {
-            trace!("Writing a file '{:?}' len={}", self.path.as_ref(), data.len());
+            trace!(
+                "Writing a file '{:?}' len={}",
+                self.path.as_ref(),
+                data.len()
+            );
             fs::create_dir_all(dir_path).expect("Failed to create a directory");
             fs::write(self.path.as_ref(), data).expect("Writing failed");
         }
     }
 }
 
-
 pub struct GzippedData {
     inner: Vec<u8>,
 }
 
 impl GzippedData {
-    pub fn compress(data: &str) -> GzippedData {
+    fn compress(data: &str) -> GzippedData {
         use flate2::write::GzEncoder;
         use flate2::Compression;
         use std::io::Write;
@@ -89,10 +101,13 @@ impl GzippedData {
         s
     }
 
-    pub fn change<F>(&self, ty: EntityType, f: F) -> Self
-        where F: FnOnce(BTreeMap<EntityId, SerializedEntity>) -> BTreeMap<EntityId, SerializedEntity> {
+    fn change<F>(&self, ty: EntityType, f: F) -> Self
+    where
+        F: FnOnce(BTreeMap<EntityId, SerializedEntity>) -> BTreeMap<EntityId, SerializedEntity>,
+    {
         let entities = {
-            self.decompress().split("\n")
+            self.decompress()
+                .split("\n")
                 .filter(|l| !l.is_empty())
                 .map(|e: &str| {
                     #[derive(serde::Deserialize)]
@@ -105,7 +120,11 @@ impl GzippedData {
                     let id = ty.parse_id(&entity.id).unwrap();
                     let revision = RevisionId(entity.lastrevid);
 
-                    SerializedEntity {id, revision, data: e.to_owned()}
+                    SerializedEntity {
+                        id,
+                        revision,
+                        data: e.to_owned(),
+                    }
                 })
                 .map(|e| (e.id, e))
                 .collect::<BTreeMap<EntityId, SerializedEntity>>()
@@ -113,15 +132,20 @@ impl GzippedData {
 
         let entities = f(entities);
 
-        let entities = entities.iter().map(|(_,e)| {
-            let SerializedEntity {data, ..} = e;
-            &data[..]
-        }).collect::<Vec<_>>().join("\n") + "\n";
+        let entities = entities
+            .iter()
+            .map(|(_, e)| {
+                let SerializedEntity { data, .. } = e;
+                &data[..]
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n";
 
         Self::compress(&entities)
     }
 
-    pub fn from_binary(data: Vec<u8>) -> GzippedData {
+    fn from_binary(data: Vec<u8>) -> GzippedData {
         GzippedData { inner: data }
     }
 

@@ -1,38 +1,35 @@
+use super::SerializedEntity;
 use crate::actor::UpdateChunkCommand;
 use actix::{Actor, Context, Handler, Message};
 use actix_web::web::Bytes;
-use super::SerializedEntity;
 
 use log::*;
 
-use std::io;
-use serde_json;
-use serde;
-use crate::prelude::{EntityType, RevisionId, EntityId};
+use crate::prelude::{EntityId, EntityType};
+use chunk_storage::{GzChunkStorage, GzippedData};
+
 use std::collections::BTreeMap;
-use chunk_storage::{GzippedData, GzChunkStorage};
 
 mod chunk_storage;
 
 pub struct ChunkActor {
     i: i32,
-    storage: GzChunkStorage<String>
+    storage: GzChunkStorage<String>,
 }
 
 impl ChunkActor {
     pub fn new(i: i32) -> ChunkActor {
         ChunkActor {
             i,
-            storage: GzChunkStorage::new(EntityType::Property, format!("/tmp/wd-rt-dumps/chunk/{}.gz", i))
+            storage: GzChunkStorage::new(
+                EntityType::Property,
+                format!("/tmp/wd-rt-dumps/chunk/{}.gz", i),
+            ),
         }
     }
 
     fn load(&self) -> GzippedData {
         self.storage.load()
-    }
-
-    fn store(&self, data: GzippedData) {
-        self.storage.store(data)
     }
 }
 
@@ -50,22 +47,11 @@ impl Handler<UpdateChunkCommand> for ChunkActor {
             thread, self.i, msg.id
         );
 
-        let UpdateChunkCommand {
-            id,
-            revision,
-            data,
-        } = msg;
-        let new = SerializedEntity{id,
-            revision,
-            data
-        };
+        let UpdateChunkCommand { id, revision, data } = msg;
+        let new = SerializedEntity { id, revision, data };
 
-        let gzipped_data = self.load();
-        let index = self.i;
-
-        let res = {
-
-            let data = gzipped_data.change(EntityType::Property, move |mut entities: BTreeMap<EntityId, SerializedEntity>| {
+        self.storage
+            .change(move |mut entities: BTreeMap<EntityId, SerializedEntity>| {
                 if entities.contains_key(&id) {
                     entities.remove(&id);
                     // TODO: Check revision
@@ -77,18 +63,7 @@ impl Handler<UpdateChunkCommand> for ChunkActor {
                 entities
             });
 
-            let thread1 = {
-                let thread1 = std::thread::current();
-                thread1.name().unwrap_or("<unknown>").to_owned()
-            };
-
-            debug!("thread={} Will store, i={}", thread1, index);
-            let r = self.store(data);
-            debug!("Done storing");
-            r
-        };
-
-        Ok(res)
+        Ok(())
     }
 }
 
