@@ -6,6 +6,30 @@ use std::collections::BTreeMap;
 use std::io;
 use std::path::Path;
 
+pub trait ChunkStorage {
+    fn load(&self) -> GzippedData;
+    fn change<F>(&mut self, f: F)  -> usize
+    where
+        F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>) -> (),
+        Self: Sized;
+}
+
+struct MemStorage {
+    inner: Option<BTreeMap<EntityId, SerializedEntity>>
+}
+
+impl ChunkStorage for MemStorage {
+    fn load(&self) -> GzippedData {
+        unimplemented!()
+    }
+
+    fn change<F>(&mut self, f: F) -> usize where
+        F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>) -> (),
+        Self: Sized {
+        unimplemented!()
+    }
+}
+
 pub struct GzChunkStorage<P: AsRef<Path>> {
     ty: EntityType,
     path: P,
@@ -18,15 +42,6 @@ impl<P: AsRef<Path>> GzChunkStorage<P> {
 
     fn file_path(&self) -> &Path {
         self.path.as_ref()
-    }
-
-    pub fn change<F>(&self, f: F) -> usize
-    where
-        F: FnOnce(BTreeMap<EntityId, SerializedEntity>) -> BTreeMap<EntityId, SerializedEntity>,
-    {
-        let (data, raw_size) = self.load().change(self.ty, f);
-        self.store(data);
-        raw_size
     }
 
     pub fn load(&self) -> GzippedData {
@@ -75,6 +90,21 @@ impl<P: AsRef<Path>> GzChunkStorage<P> {
     }
 }
 
+impl<P: AsRef<Path>> ChunkStorage for GzChunkStorage<P> {
+    fn load(&self) -> GzippedData {
+        self.load()
+    }
+
+    fn change<F>(&mut self, f: F) -> usize
+    where
+        F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>) -> (),
+    {
+        let (data, raw_size) = self.load().change(self.ty, f);
+        self.store(data);
+        raw_size
+    }
+}
+
 pub struct GzippedData {
     inner: Vec<u8>,
 }
@@ -104,9 +134,9 @@ impl GzippedData {
 
     fn change<F>(&self, ty: EntityType, f: F) -> (Self, usize)
     where
-        F: FnOnce(BTreeMap<EntityId, SerializedEntity>) -> BTreeMap<EntityId, SerializedEntity>,
+        F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>) -> (),
     {
-        let entities = {
+        let mut entities = {
             self.decompress()
                 .split("\n")
                 .filter(|l| !l.is_empty())
@@ -131,7 +161,7 @@ impl GzippedData {
                 .collect::<BTreeMap<EntityId, SerializedEntity>>()
         };
 
-        let entities = f(entities);
+        f(&mut entities);
 
         let entities = entities
             .iter()

@@ -12,6 +12,8 @@ use std::collections::BTreeMap;
 
 mod chunk_storage;
 
+use chunk_storage::ChunkStorage;
+
 pub struct ChunkActor {
     i: i32,
     storage: GzChunkStorage<String>,
@@ -50,18 +52,17 @@ impl Handler<UpdateChunkCommand> for ChunkActor {
         let UpdateChunkCommand { id, revision, data } = msg;
         let new = SerializedEntity { id, revision, data };
 
-        let new_raw_size = self.storage
-            .change(move |mut entities: BTreeMap<EntityId, SerializedEntity>| {
-                if entities.contains_key(&id) {
-                    entities.remove(&id);
-                    // TODO: Check revision
-                    entities.insert(id, new);
-                } else {
-                    entities.insert(id, new);
-                }
-
-                entities
-            });
+        let new_raw_size =
+            self.storage
+                .change(move |entities: &mut BTreeMap<EntityId, SerializedEntity>| {
+                    if entities.contains_key(&id) {
+                        entities.remove(&id);
+                        // TODO: Check revision
+                        entities.insert(id, new);
+                    } else {
+                        entities.insert(id, new);
+                    }
+                });
 
         Ok(new_raw_size)
     }
