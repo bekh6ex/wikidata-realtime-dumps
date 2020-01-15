@@ -20,6 +20,7 @@ pub async fn get_entity(client: Arc<Client>, id: EntityId) -> Option<GetEntityRe
 }
 
 const INITIAL_TIMEOUT: u64 = 50;
+const MAX_TIMEOUT: u64 = 60000;
 static TIMEOUT: AtomicU64 = AtomicU64::new(INITIAL_TIMEOUT);
 const TIMEOUT_INCR: f32 = 1.3;
 const TIMEOUT_REDUCE: f32 = 0.9;
@@ -46,14 +47,14 @@ fn with_retries(
             Err(GetResponse(H2(err))) => {
                 let timeout = change_timeout(TIMEOUT_INCR);
                 info!(
-                    "Got connection error {:?}. Waiting {:?} ms and retrying",
+                    "Got connection error {:?}. Waiting {:?}ms and retrying",
                     err, TIMEOUT
                 );
                 async_std::task::sleep(Duration::from_millis(timeout)).await;
                 with_retries(client, id, try_number).await
             }
             Err(err) => {
-                warn!("Get entity failed. try={} {:?}", try_number, err);
+                warn!("Get entity failed. try={} timeout={:?} {:?}", try_number, TIMEOUT, err);
                 if try_number >= MAX_TRIES {
                     Err(err)
                 } else {
@@ -76,6 +77,9 @@ fn change_timeout(factor: f32) -> u64 {
     if timeout == initial_timeout && timeout != 0 {
         timeout = timeout - 1;
     }
+
+    timeout = timeout.min(MAX_TIMEOUT);
+
     TIMEOUT.store(timeout, Ordering::Relaxed);
     timeout as u64
 }
