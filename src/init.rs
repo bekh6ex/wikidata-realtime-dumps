@@ -39,7 +39,7 @@ pub async fn init(ty: EntityType) -> impl Stream<Item = UpdateCommand> {
             id
         })
         .map(move |id| get_entity(client.clone(), id))
-        .buffer_unordered(16)
+        .buffered(16)
         .filter_map(|e: Option<GetEntityResult>| ready(e.map(|e| e.into())))
 }
 

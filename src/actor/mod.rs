@@ -7,6 +7,7 @@ use std::pin::Pin;
 
 pub mod archive;
 pub mod chunk;
+pub mod chunk_storage;
 
 pub struct GetDump;
 
