@@ -10,7 +10,9 @@ use serde_json;
 use serde;
 use crate::prelude::{EntityType, RevisionId, EntityId};
 use std::collections::BTreeMap;
-use crate::actor::chunk_storage::{GzippedData, GzChunkStorage};
+use chunk_storage::{GzippedData, GzChunkStorage};
+
+mod chunk_storage;
 
 pub struct ChunkActor {
     i: i32,
@@ -30,7 +32,7 @@ impl ChunkActor {
     }
 
     fn store(&self, data: GzippedData) {
-       self.storage.store(data)
+        self.storage.store(data)
     }
 }
 
