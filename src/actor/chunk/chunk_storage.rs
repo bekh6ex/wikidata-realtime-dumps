@@ -20,12 +20,13 @@ impl<P: AsRef<Path>> GzChunkStorage<P> {
         self.path.as_ref()
     }
 
-    pub fn change<F>(&self, f: F)
+    pub fn change<F>(&self, f: F) -> usize
     where
         F: FnOnce(BTreeMap<EntityId, SerializedEntity>) -> BTreeMap<EntityId, SerializedEntity>,
     {
-        let data = self.load().change(self.ty, f);
+        let (data, raw_size) = self.load().change(self.ty, f);
         self.store(data);
+        raw_size
     }
 
     pub fn load(&self) -> GzippedData {
@@ -101,7 +102,7 @@ impl GzippedData {
         s
     }
 
-    fn change<F>(&self, ty: EntityType, f: F) -> Self
+    fn change<F>(&self, ty: EntityType, f: F) -> (Self, usize)
     where
         F: FnOnce(BTreeMap<EntityId, SerializedEntity>) -> BTreeMap<EntityId, SerializedEntity>,
     {
@@ -142,7 +143,9 @@ impl GzippedData {
             .join("\n")
             + "\n";
 
-        Self::compress(&entities)
+        let raw_size = entities.len();
+
+        (Self::compress(&entities), raw_size)
     }
 
     fn from_binary(data: Vec<u8>) -> GzippedData {

@@ -34,7 +34,7 @@ impl ChunkActor {
 }
 
 impl Handler<UpdateChunkCommand> for ChunkActor {
-    type Result = Result<(), ()>;
+    type Result = Result<usize, ()>;
 
     fn handle(&mut self, msg: UpdateChunkCommand, _ctx: &mut Self::Context) -> Self::Result {
         let thread = {
@@ -50,7 +50,7 @@ impl Handler<UpdateChunkCommand> for ChunkActor {
         let UpdateChunkCommand { id, revision, data } = msg;
         let new = SerializedEntity { id, revision, data };
 
-        self.storage
+        let new_raw_size = self.storage
             .change(move |mut entities: BTreeMap<EntityId, SerializedEntity>| {
                 if entities.contains_key(&id) {
                     entities.remove(&id);
@@ -63,7 +63,7 @@ impl Handler<UpdateChunkCommand> for ChunkActor {
                 entities
             });
 
-        Ok(())
+        Ok(new_raw_size)
     }
 }
 
