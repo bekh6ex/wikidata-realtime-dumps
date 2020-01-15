@@ -15,18 +15,30 @@ pub trait ChunkStorage {
 }
 
 struct MemStorage {
-    inner: Option<BTreeMap<EntityId, SerializedEntity>>
+    inner: BTreeMap<EntityId, SerializedEntity>
 }
 
 impl ChunkStorage for MemStorage {
     fn load(&self) -> GzippedData {
-        unimplemented!()
+        let data = self.inner.iter().map(|(_, e)| {
+            &e.data[..]
+        }).collect::<Vec<_>>().join("\n") + "\n";
+
+        GzippedData::compress(&data)
     }
 
     fn change<F>(&mut self, f: F) -> usize where
         F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>) -> (),
         Self: Sized {
-        unimplemented!()
+        f(&mut self.inner);
+
+        let data_len: usize = self.inner.iter().map(|(_, e)| {
+            e.data.len()
+        }).sum();
+
+        let nl_len = self.inner.len();
+
+        data_len + nl_len
     }
 }
 
