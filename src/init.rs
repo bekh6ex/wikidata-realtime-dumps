@@ -30,7 +30,7 @@ pub async fn init(ty: EntityType) -> impl Stream<Item = UpdateCommand> {
             if id.n() == min {
                 info!("Init stream for {:?} started", ty);
             }
-            if id.n() % 1000 == 0 {
+            if id.n() % 100 == 0 {
                 info!("Initializing entity {}", id);
             }
             if id.n() == max {
@@ -39,7 +39,7 @@ pub async fn init(ty: EntityType) -> impl Stream<Item = UpdateCommand> {
             id
         })
         .map(move |id| get_entity(client.clone(), id))
-        .buffered(16)
+        .buffered(36)
         .filter_map(|e: Option<GetEntityResult>| ready(e.map(|e| e.into())))
 }
 

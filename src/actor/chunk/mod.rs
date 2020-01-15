@@ -12,26 +12,33 @@ use std::collections::BTreeMap;
 
 mod chunk_storage;
 
+use crate::actor::chunk::chunk_storage::ClosableStorage;
 use chunk_storage::ChunkStorage;
+use std::mem::swap;
 
 pub struct ChunkActor {
     i: i32,
-    storage: GzChunkStorage<String>,
+    storage: Option<ClosableStorage<String>>,
 }
 
 impl ChunkActor {
     pub fn new(i: i32) -> ChunkActor {
         ChunkActor {
             i,
-            storage: GzChunkStorage::new(
+            storage: Some(ClosableStorage::new_open(
                 EntityType::Property,
                 format!("/tmp/wd-rt-dumps/chunk/{}.gz", i),
-            ),
+            )),
         }
     }
 
     fn load(&self) -> GzippedData {
-        self.storage.load()
+        self.storage.as_ref().unwrap().load()
+    }
+
+    fn close_storage(&mut self) {
+        let storage = self.storage.take().unwrap();
+        self.storage = Some(storage.close());
     }
 }
 
@@ -52,17 +59,17 @@ impl Handler<UpdateChunkCommand> for ChunkActor {
         let UpdateChunkCommand { id, revision, data } = msg;
         let new = SerializedEntity { id, revision, data };
 
-        let new_raw_size =
-            self.storage
-                .change(move |entities: &mut BTreeMap<EntityId, SerializedEntity>| {
-                    if entities.contains_key(&id) {
-                        entities.remove(&id);
-                        // TODO: Check revision
-                        entities.insert(id, new);
-                    } else {
-                        entities.insert(id, new);
-                    }
-                });
+        let new_raw_size = self.storage.as_mut().unwrap().change(
+            move |entities: &mut BTreeMap<EntityId, SerializedEntity>| {
+                if entities.contains_key(&id) {
+                    entities.remove(&id);
+                    // TODO: Check revision
+                    entities.insert(id, new);
+                } else {
+                    entities.insert(id, new);
+                }
+            },
+        );
 
         Ok(new_raw_size)
     }
@@ -84,6 +91,7 @@ impl Handler<GetChunk> for ChunkActor {
         let thread = thread1.name().unwrap_or("<unknown>").to_owned();
         debug!("thread={} Get chunk: i={}", thread, self.i);
         let res = self.load().to_bytes();
+        self.close_storage();
         Ok(res)
     }
 }

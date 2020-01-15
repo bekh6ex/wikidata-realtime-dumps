@@ -2,39 +2,91 @@ use crate::actor::SerializedEntity;
 use crate::prelude::{EntityId, EntityType, RevisionId};
 use actix_web::web::Bytes;
 use log::*;
+use serde::export::fmt::{Debug, Error};
+use serde::export::Formatter;
 use std::collections::BTreeMap;
 use std::io;
 use std::path::Path;
 
 pub trait ChunkStorage {
     fn load(&self) -> GzippedData;
-    fn change<F>(&mut self, f: F)  -> usize
+    fn change<F>(&mut self, f: F) -> usize
     where
         F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>) -> (),
         Self: Sized;
 }
 
-struct MemStorage {
-    inner: BTreeMap<EntityId, SerializedEntity>
+#[derive(Debug)]
+pub enum ClosableStorage<P: AsRef<Path> + Debug> {
+    Mem {
+        storage: MemStorage,
+        ty: EntityType,
+        path: P,
+    },
+    Gz(GzChunkStorage<P>),
 }
 
-impl ChunkStorage for MemStorage {
-    fn load(&self) -> GzippedData {
-        let data = self.inner.iter().map(|(_, e)| {
-            &e.data[..]
-        }).collect::<Vec<_>>().join("\n") + "\n";
-
-        GzippedData::compress(&data)
+impl<P: AsRef<Path> + Clone + Debug> ClosableStorage<P> {
+    pub fn new_open(ty: EntityType, path: P) -> Self {
+        ClosableStorage::Mem {
+            storage: MemStorage::new(),
+            ty,
+            path,
+        }
     }
 
-    fn change<F>(&mut self, f: F) -> usize where
-        F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>) -> (),
-        Self: Sized {
-        f(&mut self.inner);
+    pub fn close(self) -> Self {
+        match &self {
+            ClosableStorage::Mem { storage, path, ty } => {
+                debug!("Closing storage with path {:?}", path);
 
-        let data_len: usize = self.inner.iter().map(|(_, e)| {
-            e.data.len()
-        }).sum();
+                ClosableStorage::Gz(GzChunkStorage::new_initialized(
+                    *ty,
+                    path.clone(),
+                    storage.load(),
+                ))
+            }
+            ClosableStorage::Gz(_) => {
+                warn!("Trying to close Gz storage");
+                self
+            }
+        }
+    }
+}
+
+impl<P: AsRef<Path> + Debug> ChunkStorage for ClosableStorage<P> {
+    fn load(&self) -> GzippedData {
+        match &self {
+            ClosableStorage::Mem { storage, .. } => storage.load(),
+            ClosableStorage::Gz(storage) => storage.load(),
+        }
+    }
+
+    fn change<F>(&mut self, f: F) -> usize
+    where
+        F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>) -> (),
+        Self: Sized,
+    {
+        match self {
+            ClosableStorage::Mem { storage, .. } => storage.change(f),
+            ClosableStorage::Gz(storage) => storage.change(f),
+        }
+    }
+}
+
+pub struct MemStorage {
+    inner: BTreeMap<EntityId, SerializedEntity>,
+}
+
+impl MemStorage {
+    fn new() -> Self {
+        MemStorage {
+            inner: BTreeMap::new(),
+        }
+    }
+
+    fn len(&self) -> usize {
+        let data_len: usize = self.inner.iter().map(|(_, e)| e.data.len()).sum();
 
         let nl_len = self.inner.len();
 
@@ -42,14 +94,49 @@ impl ChunkStorage for MemStorage {
     }
 }
 
+impl Debug for MemStorage {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        f.write_str(&format!("MemStorage(len={})", self.len()))
+            .unwrap();
+        Ok(())
+    }
+}
+
+impl ChunkStorage for MemStorage {
+    fn load(&self) -> GzippedData {
+        let data = self
+            .inner
+            .iter()
+            .map(|(_, e)| &e.data[..])
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n";
+
+        GzippedData::compress(&data)
+    }
+
+    fn change<F>(&mut self, f: F) -> usize
+    where
+        F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>) -> (),
+        Self: Sized,
+    {
+        f(&mut self.inner);
+
+        self.len()
+    }
+}
+
+#[derive(Debug)]
 pub struct GzChunkStorage<P: AsRef<Path>> {
     ty: EntityType,
     path: P,
 }
 
 impl<P: AsRef<Path>> GzChunkStorage<P> {
-    pub fn new(ty: EntityType, path: P) -> Self {
-        GzChunkStorage { ty, path }
+    pub fn new_initialized(ty: EntityType, path: P, data: GzippedData) -> Self {
+        let s = GzChunkStorage { ty, path };
+        s.store(data);
+        s
     }
 
     fn file_path(&self) -> &Path {

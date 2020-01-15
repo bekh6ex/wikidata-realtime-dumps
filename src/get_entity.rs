@@ -19,9 +19,10 @@ pub async fn get_entity(client: Arc<Client>, id: EntityId) -> Option<GetEntityRe
         .expect("Failed to get entity")
 }
 
-const TIMEOUT: AtomicU64 = AtomicU64::new(10);
+const INITIAL_TIMEOUT: u64 = 50;
+static TIMEOUT: AtomicU64 = AtomicU64::new(INITIAL_TIMEOUT);
 const TIMEOUT_INCR: f32 = 1.3;
-const TIMEOUT_REDUCE: f32 = 0.95;
+const TIMEOUT_REDUCE: f32 = 0.9;
 
 fn with_retries(
     client: Arc<Client>,
@@ -30,6 +31,8 @@ fn with_retries(
 ) -> Pin<Box<dyn Future<Output = Result<Option<GetEntityResult>, Error>>>> {
     Box::pin(async move {
         const MAX_TRIES: u8 = 5;
+
+        debug!("Getting an entity {}. timeout={:?}", id, TIMEOUT);
 
         let r = get_entity_internal(client.clone(), id).await;
 
@@ -43,8 +46,8 @@ fn with_retries(
             Err(GetResponse(H2(err))) => {
                 let timeout = change_timeout(TIMEOUT_INCR);
                 info!(
-                    "Got connection error {:?}. Waiting {}ms and retrying",
-                    err, timeout
+                    "Got connection error {:?}. Waiting {:?} ms and retrying",
+                    err, TIMEOUT
                 );
                 async_std::task::sleep(Duration::from_millis(timeout)).await;
                 with_retries(client, id, try_number).await
@@ -64,9 +67,16 @@ fn with_retries(
 }
 
 fn change_timeout(factor: f32) -> u64 {
-    let timeout = TIMEOUT.load(Ordering::Relaxed);
-    let timeout: f32 = timeout as f32 * factor;
-    TIMEOUT.store(timeout as u64, Ordering::Relaxed);
+    let mut initial_timeout = TIMEOUT.load(Ordering::Relaxed);
+    if initial_timeout < INITIAL_TIMEOUT && factor > 1.0 {
+        initial_timeout = INITIAL_TIMEOUT;
+    }
+    let timeout: f32 = initial_timeout as f32 * factor;
+    let mut timeout = timeout.round() as u64;
+    if timeout == initial_timeout && timeout != 0 {
+        timeout = timeout - 1;
+    }
+    TIMEOUT.store(timeout, Ordering::Relaxed);
     timeout as u64
 }
 
