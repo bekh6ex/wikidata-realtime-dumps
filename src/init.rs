@@ -17,12 +17,27 @@ pub async fn init(ty: EntityType) -> impl Stream<Item = UpdateCommand> {
     let latest_id = get_latest_entity_id(ty).await;
     let safety_offset = 100;
 
+    let min = 1;
     let max = latest_id.n() + safety_offset;
 
     let client = Arc::new(create_client());
 
-    iter(1..max)
+    debug!("Creating init stream for {:?}", ty);
+
+    iter(min..=max)
         .map(move |n| ty.id(n))
+        .map(move |id| {
+            if id.n() == min {
+                info!("Init stream for {:?} started", ty);
+            }
+            if id.n() % 1000 == 0 {
+                info!("Initializing entity {}", id);
+            }
+            if id.n() == max {
+                info!("Initializing the last entity of type {:?}: {}", ty, id);
+            }
+            id
+        })
         .map(move |id| get_entity(client.clone(), id))
         .buffer_unordered(16)
         .filter_map(|e: Option<GetEntityResult>| ready(e.map(|e| e.into())))

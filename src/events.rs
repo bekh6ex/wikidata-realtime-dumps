@@ -35,7 +35,7 @@ async fn create_stream() -> impl Stream<Item = Event> {
         .await
         .expect("response");
 
-    info!("Stream started");
+    info!("Event stream started");
     trace!("Got response from stream API: {:?}", response);
     let async_read = response
         .into_stream()
@@ -53,7 +53,7 @@ async fn create_stream() -> impl Stream<Item = Event> {
     decode_stream(async_read)
         .take_while(|decoding_result| {
             if decoding_result.is_err() {
-                error!("Error after decoding: {:?}", decoding_result)
+                warn!("Error after decoding: {:?}", decoding_result)
             }
             ready(decoding_result.is_ok())
         })
@@ -73,11 +73,11 @@ pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
 
             match event {
                 Event::Message { data, .. } => {
-                    let data: Result<EventData> = serde_json::from_str(&data);
-                    match data {
+                    let res: Result<EventData> = serde_json::from_str(&data);
+                    match res {
                         Ok(result) => Some(result),
                         Err(e) => {
-                            error!("{:?}", e);
+                            error!("Error after deserialization {:?} data={}", e, data);
                             None
                         }
                     }
@@ -125,6 +125,7 @@ mod continuous_stream {
     type StreamOfStream<X> =
         FilterMap<Chained<X>, Ready<Option<X>>, fn(Option<X>) -> Ready<Option<X>>>;
     type WrapStreamResult<X> = Flatten<StreamOfStream<X>>;
+
 //    type WrapStreamResultBoxed<X: Stream> = Box<dyn Stream<Item = X::Item> + Sync + Send>;
 
     pub struct ContinuousStream<St: Stream + 'static, Cr> {
@@ -228,7 +229,8 @@ struct EventData {
     title: String,
     #[serde(rename(deserialize = "type"))]
     event_type: String,
-    namespace: u32,
+    // Has to be signed because `-1` is namespace for Special pages
+    namespace: i64,
     revision: Option<RevisionData>,
 }
 

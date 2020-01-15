@@ -102,12 +102,12 @@ pub struct RevisionId(pub u64);
 
 #[derive(Debug)]
 pub struct NamespaceId {
-    n: u32,
+    n: i64,
     s: Option<&'static str>,
 }
 
 impl NamespaceId {
-    pub fn n(&self) -> u32 {
+    pub fn n(&self) -> i64 {
         self.n
     }
 }
