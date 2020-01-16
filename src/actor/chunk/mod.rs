@@ -14,6 +14,7 @@ mod chunk_storage;
 
 use crate::actor::chunk::chunk_storage::ClosableStorage;
 use chunk_storage::ChunkStorage;
+use std::sync::Arc;
 
 pub struct ChunkActor {
     i: i32,
@@ -36,6 +37,7 @@ impl ChunkActor {
     }
 
     fn close_storage(&mut self) {
+        info!("Actor {} closing storage.", self.i);
         let storage = self.storage.take().unwrap();
         self.storage = Some(storage.close());
     }
@@ -90,11 +92,25 @@ impl Handler<GetChunk> for ChunkActor {
         let thread = thread1.name().unwrap_or("<unknown>").to_owned();
         debug!("thread={} Get chunk: i={}", thread, self.i);
         let res = self.load().to_bytes();
-        self.close_storage();
         Ok(res)
     }
 }
 
 impl Actor for ChunkActor {
     type Context = Context<Self>;
+}
+
+pub struct Persist;
+
+impl Message for Persist {
+    type Result = Arc<()>;
+}
+
+impl Handler<Persist> for ChunkActor {
+    type Result = Arc<()>;
+
+    fn handle(&mut self, _msg: Persist, _ctx: &mut Self::Context) -> Self::Result {
+        self.close_storage();
+        Arc::new(())
+    }
 }

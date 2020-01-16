@@ -80,12 +80,21 @@ impl EntityType {
 #[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub struct EntityId {
     ty: EntityType,
-    id: u32,
+    id: u32, //TODO: Use non-zero type
 }
 
 impl EntityId {
+    pub fn ty(&self) -> EntityType {
+        self.ty
+    }
     pub fn n(&self) -> u32 {
         self.id
+    }
+    pub fn next(&self) -> EntityId {
+        EntityId {
+            ty: self.ty,
+            id: self.id + 1,
+        }
     }
 }
 

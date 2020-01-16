@@ -20,6 +20,9 @@ pub async fn start(archive_actor: Addr<ArchiveActor>) -> std::io::Result<()> {
 }
 
 async fn handle_request(_req: HttpRequest, ar: web::Data<Addr<ArchiveActor>>) -> impl Responder {
+    // TODO: As long as we return chunks in order we can make it possible to return only certain
+    //       requested ranges of entities
+
     let result = ar.send(GetDump).await.expect("asd").expect("jj");
     HttpResponse::Ok().streaming(result.map(|b| Ok(b) as Result<Bytes, ()>))
 }

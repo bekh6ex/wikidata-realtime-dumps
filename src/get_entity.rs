@@ -54,7 +54,10 @@ fn with_retries(
                 with_retries(client, id, try_number).await
             }
             Err(err) => {
-                warn!("Get entity failed. try={} timeout={:?} {:?}", try_number, TIMEOUT, err);
+                warn!(
+                    "Get entity failed. try={} timeout={:?} {:?}",
+                    try_number, TIMEOUT, err
+                );
                 if try_number >= MAX_TRIES {
                     Err(err)
                 } else {

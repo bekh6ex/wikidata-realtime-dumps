@@ -4,10 +4,12 @@ use log::*;
 
 use futures::{self, StreamExt};
 
-use crate::actor::archive::ArchiveActor;
+use crate::actor::archive::{ArchiveActor, InitializationFinished};
 use crate::actor::UpdateCommand;
 use crate::events::get_update_stream;
 use crate::prelude::EntityType;
+use futures::future::ready;
+use futures::stream::once;
 
 mod actor;
 mod events;
@@ -30,11 +32,15 @@ async fn main() -> std::io::Result<()> {
 
     let init_stream = init::init(EntityType::Property).await;
 
+    // TODO: Update stream last-event-id should be read and stream can only be started after init is done
     let update_stream = get_update_stream().await;
 
     let archive_actor = ArchiveActor::new().start();
 
     let archive_actor_for_stream = archive_actor.clone();
+    let archive_actor_for_stream2 = archive_actor.clone();
+
+    let init_finished_stream = once(ready(None));
 
     let send_forward = |e: UpdateCommand| {
         let archive_actor_for_stream = archive_actor_for_stream.clone();
@@ -52,7 +58,21 @@ async fn main() -> std::io::Result<()> {
     };
 
     let update_stream = update_stream.for_each(send_forward);
-    let init_stream = init_stream.for_each_concurrent(16, send_forward);
+    let init_stream = init_stream
+        .map(Option::Some)
+        .chain(init_finished_stream)
+        .for_each(|e| {
+            async {
+                match e {
+                    None => {
+                        archive_actor_for_stream2.do_send(InitializationFinished);
+                    }
+                    Some(event) => {
+                        send_forward(event).await;
+                    }
+                }
+            }
+        });
 
     let server_started = server::start(archive_actor);
 
