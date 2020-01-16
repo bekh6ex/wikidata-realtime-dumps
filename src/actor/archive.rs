@@ -50,7 +50,7 @@ impl Handler<GetDump> for ArchiveActor {
 
         let stream = iter(self.children.clone())
             .map(|c| c.send(GetChunk))
-            .buffer_unordered(ARBITERS)
+            .buffered(ARBITERS)
             .map(|r| {
                 let b: GetChunkResult = r.expect("Actor communication issue");
                 b

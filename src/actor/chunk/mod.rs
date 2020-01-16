@@ -6,7 +6,7 @@ use actix_web::web::Bytes;
 use log::*;
 
 use crate::prelude::{EntityId, EntityType};
-use chunk_storage::{GzChunkStorage, GzippedData};
+use chunk_storage::GzippedData;
 
 use std::collections::BTreeMap;
 
@@ -14,7 +14,6 @@ mod chunk_storage;
 
 use crate::actor::chunk::chunk_storage::ClosableStorage;
 use chunk_storage::ChunkStorage;
-use std::mem::swap;
 
 pub struct ChunkActor {
     i: i32,

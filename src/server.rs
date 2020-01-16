@@ -19,7 +19,7 @@ pub async fn start(archive_actor: Addr<ArchiveActor>) -> std::io::Result<()> {
     .await
 }
 
-async fn handle_request(req: HttpRequest, ar: web::Data<Addr<ArchiveActor>>) -> impl Responder {
+async fn handle_request(_req: HttpRequest, ar: web::Data<Addr<ArchiveActor>>) -> impl Responder {
     let result = ar.send(GetDump).await.expect("asd").expect("jj");
     HttpResponse::Ok().streaming(result.map(|b| Ok(b) as Result<Bytes, ()>))
 }

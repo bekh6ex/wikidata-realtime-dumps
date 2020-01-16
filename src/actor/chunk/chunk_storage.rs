@@ -86,7 +86,7 @@ impl MemStorage {
     }
 
     fn len(&self) -> usize {
-        let data_len: usize = self.inner.iter().map(|(_, e)| e.data.len()).sum();
+        let data_len: usize = self.inner.values().map(|e| e.data.len()).sum();
 
         let nl_len = self.inner.len();
 
@@ -106,8 +106,8 @@ impl ChunkStorage for MemStorage {
     fn load(&self) -> GzippedData {
         let data = self
             .inner
-            .iter()
-            .map(|(_, e)| &e.data[..])
+            .values()
+            .map(|e| &e.data[..])
             .collect::<Vec<_>>()
             .join("\n")
             + "\n";
@@ -235,6 +235,10 @@ impl GzippedData {
     where
         F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>) -> (),
     {
+        use measure_time::*;
+        // 1152ms for the function with raw data len=22202461 and 1291 entities
+
+        debug_time!("Total time for changing gzipped {:?} chunk", ty);
         let mut entities = {
             self.decompress()
                 .split("\n")
@@ -263,8 +267,8 @@ impl GzippedData {
         f(&mut entities);
 
         let entities = entities
-            .iter()
-            .map(|(_, e)| {
+            .values()
+            .map(|e| {
                 let SerializedEntity { data, .. } = e;
                 &data[..]
             })
