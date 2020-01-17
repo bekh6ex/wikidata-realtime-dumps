@@ -12,18 +12,18 @@ use std::collections::BTreeMap;
 
 mod chunk_storage;
 
-use crate::actor::chunk::chunk_storage::ClosableStorage;
+use crate::actor::volume::chunk_storage::ClosableStorage;
 use chunk_storage::ChunkStorage;
 use std::sync::Arc;
 
-pub struct ChunkActor {
+pub struct VolumeActor {
     i: i32,
     storage: Option<ClosableStorage<String>>,
 }
 
-impl ChunkActor {
-    pub fn new(i: i32) -> ChunkActor {
-        ChunkActor {
+impl VolumeActor {
+    pub fn new(i: i32) -> VolumeActor {
+        VolumeActor {
             i,
             storage: Some(ClosableStorage::new_open(
                 EntityType::Property,
@@ -43,7 +43,7 @@ impl ChunkActor {
     }
 }
 
-impl Handler<UpdateChunkCommand> for ChunkActor {
+impl Handler<UpdateChunkCommand> for VolumeActor {
     type Result = Result<usize, ()>;
 
     fn handle(&mut self, msg: UpdateChunkCommand, _ctx: &mut Self::Context) -> Self::Result {
@@ -84,7 +84,7 @@ impl Message for GetChunk {
     type Result = GetChunkResult;
 }
 
-impl Handler<GetChunk> for ChunkActor {
+impl Handler<GetChunk> for VolumeActor {
     type Result = GetChunkResult;
 
     fn handle(&mut self, _msg: GetChunk, _ctx: &mut Self::Context) -> Self::Result {
@@ -96,7 +96,7 @@ impl Handler<GetChunk> for ChunkActor {
     }
 }
 
-impl Actor for ChunkActor {
+impl Actor for VolumeActor {
     type Context = Context<Self>;
 }
 
@@ -106,7 +106,7 @@ impl Message for Persist {
     type Result = Arc<()>;
 }
 
-impl Handler<Persist> for ChunkActor {
+impl Handler<Persist> for VolumeActor {
     type Result = Arc<()>;
 
     fn handle(&mut self, _msg: Persist, _ctx: &mut Self::Context) -> Self::Result {

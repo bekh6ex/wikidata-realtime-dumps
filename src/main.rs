@@ -4,7 +4,7 @@ use log::*;
 
 use futures::{self, StreamExt};
 
-use crate::actor::archive::{ArchiveActor, InitializationFinished};
+use crate::actor::archivarius::{ArchivariusActor, InitializationFinished};
 use crate::actor::UpdateCommand;
 use crate::events::get_update_stream;
 use crate::prelude::EntityType;
@@ -35,7 +35,7 @@ async fn main() -> std::io::Result<()> {
     // TODO: Update stream last-event-id should be read and stream can only be started after init is done
     let update_stream = get_update_stream().await;
 
-    let archive_actor = ArchiveActor::new().start();
+    let archive_actor = ArchivariusActor::new().start();
 
     let archive_actor_for_stream = archive_actor.clone();
     let archive_actor_for_stream2 = archive_actor.clone();

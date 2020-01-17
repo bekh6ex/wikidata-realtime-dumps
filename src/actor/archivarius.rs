@@ -1,5 +1,5 @@
-use super::chunk;
-use crate::actor::chunk::{ChunkActor, GetChunk, GetChunkResult};
+use super::volume;
+use crate::actor::volume::{VolumeActor, GetChunk, GetChunkResult};
 use crate::actor::{GetDump, GetDumpResult, UpdateChunkCommand, UpdateCommand};
 use crate::prelude::EntityId;
 use actix::{Actor, Addr, Arbiter, AsyncContext, Context, Handler, Message};
@@ -23,26 +23,26 @@ use std::sync::Arc;
 
 const MAX_CHUNK_SIZE: usize = 22 * 1024 * 1024;
 
-pub struct ArchiveActor {
+pub struct ArchivariusActor {
     initialization_in_progress: bool,
-    closed_actors: Vec<(EntityRange, Addr<chunk::ChunkActor>)>,
-    open_actor: Addr<chunk::ChunkActor>,
+    closed_actors: Vec<(EntityRange, Addr<volume::VolumeActor>)>,
+    open_actor: Addr<volume::VolumeActor>,
     last_id_to_open_actor: Option<EntityId>,
     arbeiters: Vec<Arbiter>,
 }
 
-impl ArchiveActor {
-    pub fn new() -> ArchiveActor {
+impl ArchivariusActor {
+    pub fn new() -> ArchivariusActor {
         let arbeiters = (0..ARBITERS).map(|_| Arbiter::new()).collect::<Vec<_>>();
 
         let closed_actors = vec![];
         let new_id = closed_actors.len();
-        let open_actor = chunk::ChunkActor::start_in_arbiter(&arbeiters[0], move |_| {
-            chunk::ChunkActor::new(new_id as i32)
+        let open_actor = volume::VolumeActor::start_in_arbiter(&arbeiters[0], move |_| {
+            volume::VolumeActor::new(new_id as i32)
         });
         let last_id_to_open_actor: Option<EntityId> = None;
 
-        ArchiveActor {
+        ArchivariusActor {
             initialization_in_progress: true,
             arbeiters,
             closed_actors,
@@ -51,7 +51,7 @@ impl ArchiveActor {
         }
     }
 
-    fn find_closed(&self, id: EntityId) -> Option<Addr<ChunkActor>> {
+    fn find_closed(&self, id: EntityId) -> Option<Addr<VolumeActor>> {
         let target_actor = self
             .closed_actors
             .iter()
@@ -66,15 +66,15 @@ impl ArchiveActor {
         let arbeiter_index = new_id % self.arbeiters.len();
 
         let new_open_actor =
-            chunk::ChunkActor::start_in_arbiter(&self.arbeiters[arbeiter_index], move |_| {
-                chunk::ChunkActor::new(new_id as i32)
+            volume::VolumeActor::start_in_arbiter(&self.arbeiters[arbeiter_index], move |_| {
+                volume::VolumeActor::new(new_id as i32)
             });
 
         let old_open_actor = replace(&mut self.open_actor, new_open_actor);
 
         if self.initialization_in_progress {
             info!("Sending command to persist the chunk");
-            old_open_actor.do_send(chunk::Persist);
+            old_open_actor.do_send(volume::Persist);
         }
 
         let top_id = self
@@ -91,14 +91,14 @@ impl ArchiveActor {
     }
 }
 
-impl Actor for ArchiveActor {
+impl Actor for ArchivariusActor {
     type Context = Context<Self>;
     fn started(&mut self, _ctx: &mut Self::Context) {
         info!("ArchiveActor started!")
     }
 }
 
-impl Handler<GetDump> for ArchiveActor {
+impl Handler<GetDump> for ArchivariusActor {
     type Result = GetDumpResult;
 
     fn handle(&mut self, _msg: GetDump, _ctx: &mut Self::Context) -> Self::Result {
@@ -132,7 +132,7 @@ impl Handler<GetDump> for ArchiveActor {
     }
 }
 
-impl Handler<UpdateCommand> for ArchiveActor {
+impl Handler<UpdateCommand> for ArchivariusActor {
     type Result = Result<Pin<Box<dyn Future<Output = ()> + Send + Sync>>, ()>;
 
     fn handle(&mut self, item: UpdateCommand, ctx: &mut Self::Context) -> Self::Result {
@@ -186,7 +186,7 @@ impl Handler<UpdateCommand> for ArchiveActor {
     }
 }
 
-impl Handler<CloseOpenActor> for ArchiveActor {
+impl Handler<CloseOpenActor> for ArchivariusActor {
     type Result = Arc<()>;
 
     fn handle(&mut self, msg: CloseOpenActor, _ctx: &mut Self::Context) -> Self::Result {
@@ -200,21 +200,21 @@ impl Handler<CloseOpenActor> for ArchiveActor {
     }
 }
 
-impl Handler<InitializationFinished> for ArchiveActor {
+impl Handler<InitializationFinished> for ArchivariusActor {
     type Result = Arc<()>;
 
     fn handle(&mut self, _msg: InitializationFinished, _ctx: &mut Self::Context) -> Self::Result {
         self.initialization_in_progress = false;
 
         info!("Initialization finished. Sending command to persist the chunk of an open actor");
-        self.open_actor.do_send(chunk::Persist);
+        self.open_actor.do_send(volume::Persist);
 
         Arc::new(())
     }
 }
 
 struct CloseOpenActor {
-    addr: Addr<ChunkActor>,
+    addr: Addr<VolumeActor>,
 }
 
 impl Message for CloseOpenActor {

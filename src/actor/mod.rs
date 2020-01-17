@@ -5,8 +5,8 @@ use actix_web::web::Bytes;
 use std::future::Future;
 use std::pin::Pin;
 
-pub mod archive;
-pub mod chunk;
+pub mod archivarius;
+pub mod volume;
 
 pub struct GetDump;
 
