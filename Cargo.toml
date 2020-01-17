@@ -27,4 +27,7 @@ async-std = "1.4.0"
 flate2 = "1.0.13"
 pin-utils = "0.1.0-alpha.4"
 futures-util = "0.3.1"
+# TODO try out either of the following
+#futures-retry = "0.4.0"
+#backoff = "0.1.5"
 measure_time = "0.6"
