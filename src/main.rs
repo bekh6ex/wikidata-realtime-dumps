@@ -29,13 +29,14 @@ async fn main() -> std::io::Result<()> {
     info!("Starting...");
 
     // TODO Fix data race: If entity gets deleted while initialization is happening there might be a race
+    let entity_type = EntityType::Property;
 
-    let init_stream = init::init(EntityType::Property).await;
+    let init_stream = init::init(entity_type).await;
 
     // TODO: Update stream last-event-id should be read and stream can only be started after init is done
-    let update_stream = get_update_stream().await;
+    let update_stream = get_update_stream(entity_type).await;
 
-    let archive_actor = ArchivariusActor::new().start();
+    let archive_actor = ArchivariusActor::new(entity_type).start();
 
     let archive_actor_for_stream = archive_actor.clone();
     let archive_actor_for_stream2 = archive_actor.clone();

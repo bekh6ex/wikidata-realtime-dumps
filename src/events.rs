@@ -60,7 +60,7 @@ async fn create_stream() -> impl Stream<Item = Event> {
         .map(|r| r.unwrap())
 }
 
-pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
+pub async fn get_update_stream(ty: EntityType) -> impl Stream<Item = UpdateCommand> {
     let client_for_entities = Arc::new(create_client());
 
     continuous_stream::ContinuousStream::new(
@@ -86,12 +86,13 @@ pub async fn get_update_stream() -> impl Stream<Item = UpdateCommand> {
             }
         }
     })
-    .filter(|e| ready(e.wiki == WIKIDATA && e.namespace == EntityType::Property.namespace().n()))
+    .filter(move |e| ready(e.wiki == WIKIDATA && e.namespace == ty.namespace().n()))
     .filter_map(move |event_data| {
         let client = client_for_entities.clone();
-        async {
+        let ty = ty;
+        async move {
             let EventData { title, .. } = event_data;
-            let id = EntityType::Property.parse_from_title(&title).unwrap();
+            let id = ty.parse_from_title(&title).unwrap();
 
             let client = client;
 

@@ -22,11 +22,11 @@ pub struct VolumeActor {
 }
 
 impl VolumeActor {
-    pub fn new(i: i32) -> VolumeActor {
+    pub fn new(ty: EntityType, i: i32) -> VolumeActor {
         VolumeActor {
             i,
             storage: Some(ClosableStorage::new_open(
-                EntityType::Property,
+                ty,
                 format!("/tmp/wd-rt-dumps/chunk/{}.gz", i),
             )),
         }

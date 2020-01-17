@@ -1,7 +1,7 @@
 use super::volume;
 use crate::actor::volume::{VolumeActor, GetChunk, GetChunkResult};
 use crate::actor::{GetDump, GetDumpResult, UpdateChunkCommand, UpdateCommand};
-use crate::prelude::EntityId;
+use crate::prelude::*;
 use actix::{Actor, Addr, Arbiter, AsyncContext, Context, Handler, Message};
 use futures::stream::iter;
 use futures::StreamExt;
@@ -24,6 +24,7 @@ use std::sync::Arc;
 const MAX_CHUNK_SIZE: usize = 22 * 1024 * 1024;
 
 pub struct ArchivariusActor {
+    ty: EntityType,
     initialization_in_progress: bool,
     closed_actors: Vec<(EntityRange, Addr<volume::VolumeActor>)>,
     open_actor: Addr<volume::VolumeActor>,
@@ -32,17 +33,18 @@ pub struct ArchivariusActor {
 }
 
 impl ArchivariusActor {
-    pub fn new() -> ArchivariusActor {
+    pub fn new(ty: EntityType) -> ArchivariusActor {
         let arbeiters = (0..ARBITERS).map(|_| Arbiter::new()).collect::<Vec<_>>();
 
         let closed_actors = vec![];
         let new_id = closed_actors.len();
         let open_actor = volume::VolumeActor::start_in_arbiter(&arbeiters[0], move |_| {
-            volume::VolumeActor::new(new_id as i32)
+            volume::VolumeActor::new(ty,new_id as i32)
         });
         let last_id_to_open_actor: Option<EntityId> = None;
 
         ArchivariusActor {
+            ty,
             initialization_in_progress: true,
             arbeiters,
             closed_actors,
@@ -65,9 +67,10 @@ impl ArchivariusActor {
 
         let arbeiter_index = new_id % self.arbeiters.len();
 
+        let ty = self.ty;
         let new_open_actor =
             volume::VolumeActor::start_in_arbiter(&self.arbeiters[arbeiter_index], move |_| {
-                volume::VolumeActor::new(new_id as i32)
+                volume::VolumeActor::new(ty,new_id as i32)
             });
 
         let old_open_actor = replace(&mut self.open_actor, new_open_actor);
