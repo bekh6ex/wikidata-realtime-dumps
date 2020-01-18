@@ -188,16 +188,16 @@ impl Handler<GetDump> for ArchivariusActor {
 impl Handler<UpdateCommand> for ArchivariusActor {
     type Result = Result<Pin<Box<dyn Future<Output = ()> + Send + Sync>>, ()>;
 
-    fn handle(&mut self, item: UpdateCommand, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: UpdateCommand, ctx: &mut Self::Context) -> Self::Result {
         let thread1 = std::thread::current();
         let thread = thread1.name().unwrap_or("<unknown>");
         debug!(
             "thread={} UpdateCommand[ArchiveActor]: entity_id={}",
-            thread, item.id
+            thread, msg.entity.id
         );
 
         let (is_open_actor, child) = {
-            let target_actor = self.find_closed(item.id);
+            let target_actor = self.find_closed(msg.entity.id);
 
             let actor_tuple = match target_actor {
                 Some(actor) => (false, actor),
@@ -213,13 +213,13 @@ impl Handler<UpdateCommand> for ArchivariusActor {
         let addr = ctx.address();
 
         if is_open_actor {
-            self.last_id_to_open_actor = Some(item.id);
+            self.last_id_to_open_actor = Some(msg.entity.id);
         }
 
-        let UpdateCommand { id, revision, data } = item;
+        let UpdateCommand { entity } = msg;
 
         let result = async move {
-            let result = child.send(UpdateChunkCommand { id, revision, data });
+            let result = child.send(UpdateChunkCommand { entity });
 
             let size = result
                 .await

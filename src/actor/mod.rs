@@ -16,12 +16,15 @@ impl Message for GetDump {
     type Result = GetDumpResult;
 }
 
+pub struct InitCommand {
+    entity: SerializedEntity
+}
+
 // TODO: Split to UpdateFromEventCommand and Initialize(Entity)Command
 #[derive(Debug)]
 pub struct UpdateCommand {
-    pub id: EntityId,
-    pub revision: RevisionId,
-    pub data: String,
+//    event_id
+    pub entity: SerializedEntity,
 }
 
 impl Message for UpdateCommand {
@@ -29,11 +32,10 @@ impl Message for UpdateCommand {
 }
 
 pub struct UpdateChunkCommand {
-    pub id: EntityId,
-    pub revision: RevisionId,
-    pub data: String,
+    pub entity: SerializedEntity,
 }
 
+#[derive(Debug)]
 pub struct SerializedEntity {
     pub id: EntityId,
     pub revision: RevisionId,

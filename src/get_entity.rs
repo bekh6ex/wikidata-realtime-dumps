@@ -1,4 +1,4 @@
-use crate::actor::UpdateCommand;
+use crate::actor::{UpdateCommand, SerializedEntity};
 use crate::prelude::*;
 use actix_web::client::{Client, SendRequestError};
 use actix_web::error::PayloadError;
@@ -168,7 +168,7 @@ pub struct GetEntityResult {
 impl Into<UpdateCommand> for GetEntityResult {
     fn into(self) -> UpdateCommand {
         let GetEntityResult { id, revision, data } = self;
-        UpdateCommand { id, revision, data }
+        UpdateCommand { entity: SerializedEntity{id, revision, data }}
     }
 }
 

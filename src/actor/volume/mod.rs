@@ -64,20 +64,19 @@ impl Handler<UpdateChunkCommand> for VolumeActor {
 
         debug!(
             "thread={} UpdateCommand[actor_id={}]: entity_id={}",
-            thread, self.i, msg.id
+            thread, self.i, msg.entity.id
         );
 
-        let UpdateChunkCommand { id, revision, data } = msg;
-        let new = SerializedEntity { id, revision, data };
+        let new = msg.entity;
 
         let new_raw_size = self.storage.as_mut().unwrap().change(
             move |entities: &mut BTreeMap<EntityId, SerializedEntity>| {
-                if entities.contains_key(&id) {
-                    entities.remove(&id);
+                if entities.contains_key(&new.id) {
+                    entities.remove(&new.id);
                     // TODO: Check revision
-                    entities.insert(id, new);
+                    entities.insert(new.id, new);
                 } else {
-                    entities.insert(id, new);
+                    entities.insert(new.id, new);
                 }
             },
         );
