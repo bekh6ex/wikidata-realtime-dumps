@@ -2,7 +2,7 @@ use super::volume;
 use crate::actor::volume::{GetChunk, GetChunkResult, VolumeActor};
 use crate::actor::{GetDump, GetDumpResult, UpdateChunkCommand, UpdateCommand};
 use crate::prelude::*;
-use actix::{Actor, Addr, Arbiter, AsyncContext, Context, Handler, Message};
+use actix::{Actor, Addr, Arbiter, AsyncContext, Context, Handler, Message, MessageResult};
 use futures::stream::iter;
 use futures::StreamExt;
 use log::*;
@@ -240,16 +240,16 @@ impl Handler<UpdateCommand> for ArchivariusActor {
 }
 
 impl Handler<CloseOpenActor> for ArchivariusActor {
-    type Result = Arc<()>;
+    type Result = MessageResult<CloseOpenActor>;
 
     fn handle(&mut self, msg: CloseOpenActor, _ctx: &mut Self::Context) -> Self::Result {
         if self.open_actor != msg.addr {
-            return Arc::new(());
+            return MessageResult(());
         }
 
         self.close_current_open_actor();
 
-        Arc::new(())
+        MessageResult(())
     }
 }
 
@@ -271,7 +271,7 @@ struct CloseOpenActor {
 }
 
 impl Message for CloseOpenActor {
-    type Result = Arc<()>;
+    type Result = ();
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
