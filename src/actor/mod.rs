@@ -11,7 +11,7 @@ pub mod volume;
 
 pub struct GetDump;
 
-pub type GetDumpResult = Result<Pin<Box<dyn Stream<Item = Bytes> + Send + Sync>>, ()>;
+pub type GetDumpResult = Pin<Box<dyn Stream<Item = Bytes> + Send + Sync>>;
 
 impl Message for GetDump {
     type Result = GetDumpResult;

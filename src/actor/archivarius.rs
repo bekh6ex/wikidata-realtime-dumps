@@ -182,7 +182,7 @@ impl Actor for ArchivariusActor {
 }
 
 impl Handler<GetDump> for ArchivariusActor {
-    type Result = GetDumpResult;
+    type Result = MessageResult<GetDump>;
 
     fn handle(&mut self, _msg: GetDump, _ctx: &mut Self::Context) -> Self::Result {
         let thread1 = std::thread::current();
@@ -208,7 +208,10 @@ impl Handler<GetDump> for ArchivariusActor {
                     }
                 }
             });
-        Ok(Box::pin(stream))
+
+        let stream: GetDumpResult = Box::pin(stream);
+
+        MessageResult(stream)
     }
 }
 

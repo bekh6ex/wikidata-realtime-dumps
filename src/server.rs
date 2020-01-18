@@ -13,7 +13,8 @@ pub async fn start(archive_actor: Addr<ArchivariusActor>) -> std::io::Result<()>
             .wrap(middleware::Logger::default())
             .service(web::resource("/").to(handle_request))
     })
-    .bind("127.0.0.1:8080")?
+    .bind("127.0.0.1:8080")
+    .expect("Failed to bind a port")
     .workers(3)
     .run()
     .await
@@ -26,6 +27,6 @@ async fn handle_request(
     // TODO: As long as we return chunks in order we can make it possible to return only certain
     //       requested ranges of entities
 
-    let result = ar.send(GetDump).await.expect("asd").expect("jj");
+    let result = ar.send(GetDump).await.expect("Actor communication problem");
     HttpResponse::Ok().streaming(result.map(|b| Ok(b) as Result<Bytes, ()>))
 }
