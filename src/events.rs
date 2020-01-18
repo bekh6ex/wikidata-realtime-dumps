@@ -7,7 +7,7 @@ use futures::future::ready;
 use futures::stream::once;
 use futures::{Stream, StreamExt, TryStreamExt};
 use log::*;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sse_codec::{decode_stream, Event};
 
 use crate::actor::UpdateCommand;
@@ -105,7 +105,7 @@ pub async fn get_update_stream(
             let client = client;
 
             let entity_result = get_entity(client, id).await?;
-            Some(UpdateCommand{event_id, entity: entity_result.to_serialized_entity()})
+            Some(UpdateCommand{event_id: Some(event_id), entity: entity_result.to_serialized_entity()})
         }
     })
 }
@@ -167,7 +167,7 @@ struct ProperEvent {
 }
 
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct EventId {
     inner: String,
 }

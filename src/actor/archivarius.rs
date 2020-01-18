@@ -1,23 +1,24 @@
-use super::volume;
-use crate::actor::volume::{GetChunk, GetChunkResult, VolumeActor};
-use crate::actor::{GetDump, GetDumpResult, UpdateChunkCommand, UpdateCommand};
-use crate::prelude::*;
+use std::future::Future;
+use std::mem::replace;
+use std::ops::RangeInclusive;
+use std::path::Path;
+use std::pin::Pin;
+use std::sync::{Arc, RwLock};
+
 use actix::{Actor, Addr, Arbiter, AsyncContext, Context, Handler, Message, MessageResult};
 use futures::stream::iter;
 use futures::StreamExt;
 use log::*;
 use serde::{Deserialize, Serialize};
-use std::future::Future;
 
-use std::ops::RangeInclusive;
-use std::pin::Pin;
+use crate::actor::{GetDump, GetDumpResult, UpdateChunkCommand, UpdateCommand};
+use crate::actor::volume::{GetChunk, GetChunkResult, VolumeActor};
+use crate::events::EventId;
+use crate::prelude::*;
+
+use super::volume;
 
 const ARBITERS: usize = 8;
-
-use std::mem::replace;
-
-use std::path::Path;
-use std::sync::{Arc, RwLock};
 
 const MAX_CHUNK_SIZE: usize = 22 * 1024 * 1024;
 
@@ -29,8 +30,8 @@ pub struct ArchivariusActor {
     open_actor: Addr<VolumeActor>,
     last_id_to_open_actor: Option<EntityId>,
     arbiters: Vec<Arbiter>,
+    last_processed_event_id: Option<EventId>,
     // initialized_up_to - last EntityId of persisted actor
-    // last_processed_event_id
 }
 
 impl ArchivariusActor {
@@ -83,6 +84,7 @@ impl ArchivariusActor {
             closed_actors,
             open_actor,
             last_id_to_open_actor,
+            last_processed_event_id: state.last_processed_event_id.clone()
         }
     }
 
@@ -93,6 +95,7 @@ impl ArchivariusActor {
             closed,
             open_volume_last_entity_id: self.last_id_to_open_actor,
             initialized: self.initialized,
+            last_processed_event_id: self.last_processed_event_id.clone(),
         }
     }
 
@@ -107,6 +110,28 @@ impl ArchivariusActor {
             .find(|(range, _actor)| range.inner.contains(&id))
             .map(|(_, a)| a.clone());
         target_actor
+    }
+
+    fn find_volume(&self, id: EntityId) -> (bool, Addr<VolumeActor>) {
+        let target_actor = self.find_closed(id);
+
+        let actor_tuple = match target_actor {
+            Some(actor) => (false, actor),
+            None => (true, self.open_actor.clone()),
+        };
+
+        actor_tuple.clone()
+    }
+
+    fn maybe_close_the_open_volume(self_addr: &Addr<Self>, child: Addr<VolumeActor>, size: usize) {
+        if size > MAX_CHUNK_SIZE {
+            debug!("Schedule the open actor closing. chunk_size={}", size);
+            self_addr.do_send(CloseOpenActor { addr: child });
+
+            if size > MAX_CHUNK_SIZE * 2 {
+                panic!("Size of a chunk is way too big: {}", size)
+            }
+        }
     }
 
     fn close_current_open_actor(&mut self) {
@@ -189,34 +214,20 @@ impl Handler<UpdateCommand> for ArchivariusActor {
     type Result = Result<Pin<Box<dyn Future<Output = ()> + Send + Sync>>, ()>;
 
     fn handle(&mut self, msg: UpdateCommand, ctx: &mut Self::Context) -> Self::Result {
-        let thread1 = std::thread::current();
-        let thread = thread1.name().unwrap_or("<unknown>");
-        debug!(
-            "thread={} UpdateCommand[ArchiveActor]: entity_id={}",
-            thread, msg.entity.id
-        );
+        let self_addr = ctx.address();
 
-        let (is_open_actor, child) = {
-            let target_actor = self.find_closed(msg.entity.id);
+        debug!("UpdateCommand[ArchiveActor]: entity_id={}", msg.entity.id);
+        let id = msg.entity.id;
 
-            let actor_tuple = match target_actor {
-                Some(actor) => (false, actor),
-                None => (true, self.open_actor.clone()),
-            };
+        let (is_open_actor, child) = self.find_volume(id);
 
-            actor_tuple.clone()
-        };
-
-        // TODO: Close and reopen open actor. Don't forget to check ID of the chunk actor
         // TODO: Figure out ARBEITER scheduling
 
-        let addr = ctx.address();
-
         if is_open_actor {
-            self.last_id_to_open_actor = Some(msg.entity.id);
+            self.last_id_to_open_actor = Some(id);
         }
 
-        let UpdateCommand { entity, .. } = msg;
+        let UpdateCommand { entity, event_id } = msg;
 
         let result = async move {
             let result = child.send(UpdateChunkCommand { entity });
@@ -226,30 +237,16 @@ impl Handler<UpdateCommand> for ArchivariusActor {
                 .expect("Communication with child result failed")
                 .expect("Child failed");
 
-            if size > MAX_CHUNK_SIZE && is_open_actor {
-                debug!("Schedule the open actor closing. chunk_size={}", size);
-                addr.do_send(CloseOpenActor { addr: child });
+            if let Some(event_id) = event_id {
+                // TODO: This is incorrect as soon as it is asynchronous.
+                self_addr.do_send(UpdateLastEventEventId(event_id));
+            }
 
-                if size > MAX_CHUNK_SIZE * 2 {
-                    panic!("Size of a chunk is way too big: {}", size)
-                }
+            if is_open_actor {
+                Self::maybe_close_the_open_volume(&self_addr, child, size);
             }
         };
         Ok(Box::pin(result))
-    }
-}
-
-impl Handler<CloseOpenActor> for ArchivariusActor {
-    type Result = MessageResult<CloseOpenActor>;
-
-    fn handle(&mut self, msg: CloseOpenActor, _ctx: &mut Self::Context) -> Self::Result {
-        if self.open_actor != msg.addr {
-            return MessageResult(());
-        }
-
-        self.close_current_open_actor();
-
-        MessageResult(())
     }
 }
 
@@ -272,6 +269,36 @@ struct CloseOpenActor {
 
 impl Message for CloseOpenActor {
     type Result = ();
+}
+
+impl Handler<CloseOpenActor> for ArchivariusActor {
+    type Result = MessageResult<CloseOpenActor>;
+
+    fn handle(&mut self, msg: CloseOpenActor, _ctx: &mut Self::Context) -> Self::Result {
+        if self.open_actor != msg.addr {
+            return MessageResult(());
+        }
+
+        self.close_current_open_actor();
+
+        MessageResult(())
+    }
+}
+
+struct UpdateLastEventEventId(EventId);
+
+impl Message for UpdateLastEventEventId {
+    type Result = ();
+}
+
+impl Handler<UpdateLastEventEventId> for ArchivariusActor {
+    type Result = MessageResult<UpdateLastEventEventId>;
+
+    fn handle(&mut self, UpdateLastEventEventId(event_id): UpdateLastEventEventId, ctx: &mut Self::Context) -> Self::Result {
+        self.last_processed_event_id = Some(event_id);
+
+        MessageResult(())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -339,6 +366,7 @@ impl<P: AsRef<Path>> ArchivariusStore<P> {
 struct StoredState {
     closed: Vec<EntityRange>,
     open_volume_last_entity_id: Option<EntityId>,
+    last_processed_event_id: Option<EventId>,
     initialized: bool, //TODO Should be Option<last event Id> from event stream
 }
 
@@ -347,6 +375,7 @@ impl Default for StoredState {
         StoredState {
             closed: vec![],
             open_volume_last_entity_id: None,
+            last_processed_event_id: None,
             initialized: false,
         }
     }

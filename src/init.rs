@@ -43,7 +43,7 @@ pub async fn init(ty: EntityType) -> impl Stream<Item = UpdateCommand> {
         .buffered(36)
         .filter_map(|e: Option<GetEntityResult>| {
             ready(e.map(|e| UpdateCommand {
-                event_id: EventId::new("".to_owned()),
+                event_id: None,
                 entity: e.to_serialized_entity(),
             }))
         })

@@ -18,13 +18,13 @@ impl Message for GetDump {
 }
 
 pub struct InitCommand {
-    entity: SerializedEntity,
+    pub entity: SerializedEntity,
 }
 
 // TODO: Split to UpdateFromEventCommand and Initialize(Entity)Command
 #[derive(Debug)]
 pub struct UpdateCommand {
-    pub event_id: EventId,
+    pub event_id: Option<EventId>,
     pub entity: SerializedEntity,
 }
 
