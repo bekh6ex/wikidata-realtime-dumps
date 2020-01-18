@@ -1,8 +1,6 @@
-use std::future::Future;
 use std::mem::replace;
 use std::ops::RangeInclusive;
 use std::path::Path;
-use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 
 use actix::{Actor, Addr, Arbiter, AsyncContext, Context, Handler, Message, MessageResult};
@@ -13,7 +11,7 @@ use log::*;
 use serde::{Deserialize, Serialize};
 
 use crate::actor::volume::{GetChunk, VolumeActor};
-use crate::actor::{GetDump, GetDumpResult, UpdateChunkCommand, UpdateCommand};
+use crate::actor::{GetDump, GetDumpResult, UpdateChunkCommand, UpdateCommand, UnitFuture};
 use crate::events::EventId;
 use crate::prelude::*;
 
@@ -215,7 +213,7 @@ impl Handler<GetDump> for ArchivariusActor {
 }
 
 impl Handler<UpdateCommand> for ArchivariusActor {
-    type Result = Result<Pin<Box<dyn Future<Output = ()> + Send + Sync>>, ()>;
+    type Result = MessageResult<UpdateCommand>;
 
     fn handle(&mut self, msg: UpdateCommand, ctx: &mut Self::Context) -> Self::Result {
         let self_addr = ctx.address();
@@ -233,7 +231,7 @@ impl Handler<UpdateCommand> for ArchivariusActor {
 
         let UpdateCommand { entity, event_id } = msg;
 
-        let result = async move {
+        let result: UnitFuture = Box::pin(async move {
             let result = child.send(UpdateChunkCommand { entity });
 
             let size = result.await.expect("Communication with child failed");
@@ -246,8 +244,8 @@ impl Handler<UpdateCommand> for ArchivariusActor {
             if is_open_actor {
                 Self::maybe_close_the_open_volume(&self_addr, child, size);
             }
-        };
-        Ok(Box::pin(result))
+        });
+        MessageResult(result)
     }
 }
 

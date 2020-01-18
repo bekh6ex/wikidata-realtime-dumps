@@ -25,8 +25,10 @@ pub struct UpdateCommand {
 }
 
 impl Message for UpdateCommand {
-    type Result = Result<Pin<Box<dyn Future<Output = ()> + Send + Sync>>, ()>;
+    type Result = UnitFuture;
 }
+
+pub type UnitFuture = Pin<Box<dyn Future<Output = ()> + Send + Sync>>;
 
 pub struct UpdateChunkCommand {
     pub entity: SerializedEntity,

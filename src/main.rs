@@ -41,7 +41,6 @@ async fn main() -> std::io::Result<()> {
                 .send(e)
                 .await
                 .expect("Actor communication failed")
-                .expect("ArchiveActor have failed")
                 .await;
             trace!("Got command result {:?}.", result);
         })
@@ -76,7 +75,6 @@ async fn initialize(ty: EntityType, actor: Addr<ArchivariusActor>) -> EventId {
                 .send(e)
                 .await
                 .expect("Actor communication failed")
-                .expect("ArchiveActor have failed")
                 .await;
             // TODO: Should get last event id here
             debug!("Got update result {:?} ", result);
