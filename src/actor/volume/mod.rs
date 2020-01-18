@@ -53,7 +53,7 @@ impl VolumeActor {
 }
 
 impl Handler<UpdateChunkCommand> for VolumeActor {
-    type Result = Result<usize, ()>;
+    type Result = MessageResult<UpdateChunkCommand>;
 
     fn handle(&mut self, msg: UpdateChunkCommand, _ctx: &mut Self::Context) -> Self::Result {
         let thread = {
@@ -80,7 +80,7 @@ impl Handler<UpdateChunkCommand> for VolumeActor {
             },
         );
 
-        Ok(new_raw_size)
+        MessageResult(new_raw_size)
     }
 }
 

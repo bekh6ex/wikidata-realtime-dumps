@@ -236,10 +236,7 @@ impl Handler<UpdateCommand> for ArchivariusActor {
         let result = async move {
             let result = child.send(UpdateChunkCommand { entity });
 
-            let size = result
-                .await
-                .expect("Communication with child result failed")
-                .expect("Child failed");
+            let size = result.await.expect("Communication with child failed");
 
             if let Some(event_id) = event_id {
                 // TODO: This is incorrect as soon as it is asynchronous.

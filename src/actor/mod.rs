@@ -40,5 +40,5 @@ pub struct SerializedEntity {
 }
 
 impl Message for UpdateChunkCommand {
-    type Result = Result<usize, ()>;
+    type Result = usize;
 }
