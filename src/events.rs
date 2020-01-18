@@ -19,7 +19,7 @@ const WIKIDATA: &str = "wikidatawiki";
 
 pub async fn get_current_event_id() -> EventId {
     let inner = get_top_event_id(None).await;
-    EventId { inner }
+    EventId::new(inner)
 }
 
 fn create_client() -> Client {
@@ -29,7 +29,9 @@ fn create_client() -> Client {
         .finish()
 }
 
-async fn create_stream(event_id: Option<String>) -> impl Stream<Item = Event> {
+
+
+async fn create_raw_stream(event_id: Option<String>) -> impl Stream<Item = Event> {
     let client = Arc::new(create_client());
     let mut request = client
         .get("https://stream.wikimedia.org/v2/stream/recentchange")
@@ -84,7 +86,7 @@ pub async fn get_update_stream(
     continuous_stream::ContinuousStream::new(
         move |id| {
             let id = id.unwrap_or(event_id.inner.clone());
-            once(create_stream(Some(id))).flatten()
+            once(create_raw_stream(Some(id))).flatten()
         },
         1000,
     )
@@ -124,7 +126,7 @@ pub async fn get_update_stream(
 }
 
 async fn get_top_event_id(from: Option<String>) -> String {
-    let (id, _) = create_stream(from)
+    let (id, _) = create_raw_stream(from)
         .await
         .filter_map(|e: Event| {
             let option: Option<String> = match e {
@@ -144,6 +146,13 @@ async fn get_top_event_id(from: Option<String>) -> String {
 pub struct EventId {
     inner: String,
 }
+
+impl EventId {
+    fn new(inner: String) -> Self {
+        EventId{inner}
+    }
+}
+
 
 mod continuous_stream {
     use core::task::{Context, Poll};
