@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use actix_web::client::{Client, ClientBuilder, Connector};
 use futures::future::ready;
+use futures::stream::once;
 use futures::{Stream, StreamExt, TryStreamExt};
 use log::*;
 use serde::Deserialize;
@@ -29,34 +30,33 @@ fn create_client() -> Client {
         .finish()
 }
 
-
-
 async fn create_raw_stream(event_id: Option<String>) -> impl Stream<Item = Event> {
-    use hyper::{Client, Request, Body};
+    use hyper::{Body, Client, Request};
     use hyper_rustls;
 
-    let client1 = Client::builder()
-        .build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new());
-
+    let client1 = Client::builder().build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new());
 
     let mut req = Request::builder()
         .method("GET")
-         .uri("https://stream.wikimedia.org/v2/stream/recentchange");
+        .uri("https://stream.wikimedia.org/v2/stream/recentchange");
     if event_id.is_some() {
         req = req.header("last-event-id", event_id.clone().unwrap());
     }
 
     trace!("Sending request: {:?}", req);
 
-    let resp = client1.request(req.body(Body::empty()).unwrap()).await.unwrap();
+    let resp = client1
+        .request(req.body(Body::empty()).unwrap())
+        .await
+        .unwrap();
 
-
-    info!(
-        "Event stream started from event: {}",
-        event_id.unwrap_or("<last>".into())
-    );
     trace!("Got response from stream API: {:?}", resp);
     let body1 = resp.into_body();
+
+    trace!(
+        "Starting SSE stream from event: {}",
+        event_id.unwrap_or("<last>".into())
+    );
 
     let async_read = body1
         .into_stream()
@@ -89,46 +89,28 @@ pub async fn get_update_stream(
 
     let client_for_entities = Arc::new(create_client());
 
-    continuous_stream::ContinuousStream::new(
-        move |id| {
-            let id = id.unwrap_or(event_id.inner.clone());
-            once(create_raw_stream(Some(id))).flatten()
-        },
-        1000,
-    )
-    .filter_map(|event| {
-        async move {
-            use serde_json::Result;
+    get_proper_event_stream(Some(event_id))
+        .await
+        .filter(move |e: &ProperEvent| {
+            ready(e.data.wiki == WIKIDATA && e.data.namespace == ty.namespace().n())
+        })
+        .filter_map(move |event: ProperEvent| {
+            let ProperEvent { id: event_id, data } = event;
+            let client = client_for_entities.clone();
+            let ty = ty;
+            async move {
+                let EventData { title, .. } = data;
+                let id = ty.parse_from_title(&title).unwrap();
 
-            match event {
-                Event::Message { data, .. } => {
-                    let res: Result<EventData> = serde_json::from_str(&data);
-                    match res {
-                        Ok(result) => Some(result),
-                        Err(e) => {
-                            error!("Error after deserialization {:?} data={}", e, data);
-                            None
-                        }
-                    }
-                }
-                _ => None,
+                let client = client;
+
+                let entity_result = get_entity(client, id).await?;
+                Some(UpdateCommand {
+                    event_id,
+                    entity: entity_result.to_serialized_entity(),
+                })
             }
-        }
-    })
-    .filter(move |e| ready(e.wiki == WIKIDATA && e.namespace == ty.namespace().n()))
-    .filter_map(move |event_data| {
-        let client = client_for_entities.clone();
-        let ty = ty;
-        async move {
-            let EventData { title, .. } = event_data;
-            let id = ty.parse_from_title(&title).unwrap();
-
-            let client = client;
-
-            let entity_result = get_entity(client, id).await?;
-            Some(entity_result.into())
-        }
-    })
+        })
 }
 
 async fn id_stream(from: Option<EventId>) -> impl Stream<Item = EventId> {
@@ -145,40 +127,41 @@ async fn id_stream(from: Option<EventId>) -> impl Stream<Item = EventId> {
 
 async fn get_top_event_id(from: Option<EventId>) -> EventId {
     let id_stream = id_stream(from).await;
-    let (id, _) = id_stream
-        .into_future()
-        .await;
+    let (id, _) = id_stream.into_future().await;
 
     id.unwrap()
 }
 
 async fn get_proper_event_stream(event_id: Option<EventId>) -> impl Stream<Item = ProperEvent> {
+    let stream = continuous_stream::ContinuousStream::new(
+        move |id| {
+            // TODO: Should rewind event_id couple seconds back. Event has a bit random order of events
+            let id = id.or(event_id.clone().map(|i| i.inner));
+            once(create_raw_stream(id)).flatten()
+        },
+        1000,
+    );
 
-    let stream = create_raw_stream(event_id.map(|i| i.inner)).await;
+    stream.chunks(2).map(|ch: Vec<Event>| {
+        let s = ch.as_slice();
 
-
-    stream
-        .chunks(2)
-        .map(|ch: Vec<Event>| {
-            let s = ch.as_slice();
-
-            match s {
-
-                [Event::LastEventId {id}, Event::Message {data, ..}] => {
-                    let data = serde_json::from_str(&data).unwrap();
-                    ProperEvent {id: EventId::new(id.clone()), data }
+        match s {
+            [Event::LastEventId { id }, Event::Message { data, .. }] => {
+                let data = serde_json::from_str(&data).unwrap();
+                ProperEvent {
+                    id: EventId::new(id.clone()),
+                    data,
                 }
-                _ => panic!()
-
             }
-        })
+            _ => panic!(),
+        }
+    })
 }
 
 struct ProperEvent {
     id: EventId,
-    data: EventData
+    data: EventData,
 }
-
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct EventId {
@@ -186,11 +169,11 @@ pub struct EventId {
 }
 
 impl EventId {
-    fn new(inner: String) -> Self {
-        EventId{inner}
+    // TODO: pub is temporary. Should be removed
+    pub fn new(inner: String) -> Self {
+        EventId { inner }
     }
 }
-
 
 mod continuous_stream {
     use core::task::{Context, Poll};
@@ -337,11 +320,10 @@ struct WikidataResponse {
 mod test {
 
     use super::get_top_event_id;
+    use crate::events::{get_proper_event_stream, id_stream, EventData, EventId, ProperEvent};
     use actix_rt;
-    use crate::events::{get_proper_event_stream, id_stream, EventId, ProperEvent, EventData};
     use futures::{Stream, StreamExt};
     use std::time::Duration;
-
 
     #[actix_rt::test]
     async fn can_get_top_event_id() {

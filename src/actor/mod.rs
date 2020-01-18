@@ -1,4 +1,5 @@
 use super::prelude::*;
+use crate::events::EventId;
 use actix::prelude::Stream;
 use actix::Message;
 use actix_web::web::Bytes;
@@ -17,13 +18,13 @@ impl Message for GetDump {
 }
 
 pub struct InitCommand {
-    entity: SerializedEntity
+    entity: SerializedEntity,
 }
 
 // TODO: Split to UpdateFromEventCommand and Initialize(Entity)Command
 #[derive(Debug)]
 pub struct UpdateCommand {
-//    event_id
+    pub event_id: EventId,
     pub entity: SerializedEntity,
 }
 

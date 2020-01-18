@@ -216,7 +216,7 @@ impl Handler<UpdateCommand> for ArchivariusActor {
             self.last_id_to_open_actor = Some(msg.entity.id);
         }
 
-        let UpdateCommand { entity } = msg;
+        let UpdateCommand { entity, .. } = msg;
 
         let result = async move {
             let result = child.send(UpdateChunkCommand { entity });

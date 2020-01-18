@@ -10,6 +10,7 @@ use futures::Stream;
 use log::*;
 use serde::Deserialize;
 
+use crate::events::EventId;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -40,7 +41,12 @@ pub async fn init(ty: EntityType) -> impl Stream<Item = UpdateCommand> {
         })
         .map(move |id| get_entity(client.clone(), id))
         .buffered(36)
-        .filter_map(|e: Option<GetEntityResult>| ready(e.map(|e| e.into())))
+        .filter_map(|e: Option<GetEntityResult>| {
+            ready(e.map(|e| UpdateCommand {
+                event_id: EventId::new("".to_owned()),
+                entity: e.to_serialized_entity`(),
+            }))
+        })
 }
 
 async fn get_latest_entity_id(ty: EntityType) -> EntityId {
