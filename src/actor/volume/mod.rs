@@ -13,7 +13,6 @@ use std::collections::BTreeMap;
 mod storage;
 
 use crate::actor::volume::storage::ClosableStorage;
-use std::sync::Arc;
 use storage::VolumeStorage;
 
 pub struct VolumeActor {
@@ -110,14 +109,14 @@ impl Actor for VolumeActor {
 pub struct Persist;
 
 impl Message for Persist {
-    type Result = Arc<()>;
+    type Result = ();
 }
 
 impl Handler<Persist> for VolumeActor {
-    type Result = Arc<()>;
+    type Result = MessageResult<Persist>;
 
     fn handle(&mut self, _msg: Persist, _ctx: &mut Self::Context) -> Self::Result {
         self.close_storage();
-        Arc::new(())
+        MessageResult(())
     }
 }
