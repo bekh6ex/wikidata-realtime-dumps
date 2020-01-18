@@ -6,15 +6,15 @@ use actix_web::web::Bytes;
 use log::*;
 
 use crate::prelude::{EntityId, EntityType};
-use chunk_storage::GzippedData;
+use storage::GzippedData;
 
 use std::collections::BTreeMap;
 
-mod chunk_storage;
+mod storage;
 
-use crate::actor::volume::chunk_storage::ClosableStorage;
-use chunk_storage::ChunkStorage;
+use crate::actor::volume::storage::ClosableStorage;
 use std::sync::Arc;
+use storage::VolumeStorage;
 
 pub struct VolumeActor {
     i: i32,
@@ -22,12 +22,22 @@ pub struct VolumeActor {
 }
 
 impl VolumeActor {
-    pub fn new(ty: EntityType, i: i32) -> VolumeActor {
+    pub fn new_open(ty: EntityType, i: i32) -> VolumeActor {
         VolumeActor {
             i,
             storage: Some(ClosableStorage::new_open(
                 ty,
-                format!("/tmp/wd-rt-dumps/chunk/{}.gz", i),
+                format!("/tmp/wd-rt-dumps/{:?}/{}.gz", ty, i),
+            )),
+        }
+    }
+
+    pub fn new_closed(ty: EntityType, i: i32) -> Self {
+        VolumeActor {
+            i,
+            storage: Some(ClosableStorage::new_closed(
+                ty,
+                format!("/tmp/wd-rt-dumps/{:?}/{}.gz", ty, i),
             )),
         }
     }

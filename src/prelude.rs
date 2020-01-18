@@ -1,9 +1,10 @@
 use log::*;
 use serde::export::fmt::Error;
 use serde::export::Formatter;
+use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
-#[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EntityType {
     Item,
     Property,
@@ -77,7 +78,7 @@ impl EntityType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EntityId {
     ty: EntityType,
     id: u32, //TODO: Use non-zero type

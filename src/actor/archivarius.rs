@@ -1,56 +1,102 @@
 use super::volume;
-use crate::actor::volume::{VolumeActor, GetChunk, GetChunkResult};
+use crate::actor::volume::{GetChunk, GetChunkResult, VolumeActor};
 use crate::actor::{GetDump, GetDumpResult, UpdateChunkCommand, UpdateCommand};
 use crate::prelude::*;
 use actix::{Actor, Addr, Arbiter, AsyncContext, Context, Handler, Message};
 use futures::stream::iter;
 use futures::StreamExt;
 use log::*;
+use serde::{Deserialize, Serialize};
 use std::future::Future;
 
 use std::ops::RangeInclusive;
 use std::pin::Pin;
 
-
 const ARBITERS: usize = 8;
 
+use std::mem::replace;
 
-
-use std::mem::{replace};
-
-
-use std::sync::Arc;
+use std::path::Path;
+use std::sync::{Arc, RwLock};
 
 const MAX_CHUNK_SIZE: usize = 22 * 1024 * 1024;
 
 pub struct ArchivariusActor {
+    store: ArchivariusStore<String>,
     ty: EntityType,
-    initialization_in_progress: bool,
-    closed_actors: Vec<(EntityRange, Addr<volume::VolumeActor>)>,
-    open_actor: Addr<volume::VolumeActor>,
+    initialized: bool,
+    closed_actors: Vec<(EntityRange, Addr<VolumeActor>)>,
+    open_actor: Addr<VolumeActor>,
     last_id_to_open_actor: Option<EntityId>,
-    arbeiters: Vec<Arbiter>,
+    arbiters: Vec<Arbiter>,
 }
 
 impl ArchivariusActor {
     pub fn new(ty: EntityType) -> ArchivariusActor {
-        let arbeiters = (0..ARBITERS).map(|_| Arbiter::new()).collect::<Vec<_>>();
+        let store =
+            ArchivariusStore::new(format!("/tmp/wd-rt-dumps/{:?}/archivarius.json", ty));
 
-        let closed_actors = vec![];
+        let state = store.load().unwrap_or_default();
+
+        Self::new_initialized(ty, store, state)
+    }
+
+    fn new_initialized(
+        ty: EntityType,
+        store: ArchivariusStore<String>,
+        state: StoredState,
+    ) -> ArchivariusActor {
+        let arbiters = (0..ARBITERS).map(|_| Arbiter::new()).collect::<Vec<_>>();
+
+        let closed_actors = state
+            .closed
+            .iter()
+            .enumerate()
+            .map(|(id, er)| {
+                let ar_idx = id % arbiters.len();
+                let vol = VolumeActor::start_in_arbiter(&arbiters[ar_idx], move |_| {
+                    volume::VolumeActor::new_closed(ty, id as i32)
+                });
+
+                (er.clone(), vol)
+            })
+            .collect::<Vec<_>>();
         let new_id = closed_actors.len();
-        let open_actor = volume::VolumeActor::start_in_arbiter(&arbeiters[0], move |_| {
-            volume::VolumeActor::new(ty,new_id as i32)
+        let ar_idx = new_id % arbiters.len();
+        let last_id_to_open_actor: Option<EntityId> = state.open_volume_last_entity_id;
+        let initialized = state.initialized;
+
+        let open_actor = VolumeActor::start_in_arbiter(&arbiters[ar_idx], move |_| {
+            if initialized {
+                VolumeActor::new_closed(ty, new_id as i32)
+            } else {
+                VolumeActor::new_open(ty, new_id as i32)
+            }
         });
-        let last_id_to_open_actor: Option<EntityId> = None;
 
         ArchivariusActor {
+            store,
             ty,
-            initialization_in_progress: true,
-            arbeiters,
+            initialized,
+            arbiters,
             closed_actors,
             open_actor,
             last_id_to_open_actor,
         }
+    }
+
+    fn state(&self) -> StoredState {
+        let closed = self.closed_actors.iter().map(|(r, _)| r.clone()).collect();
+
+        StoredState {
+            closed,
+            open_volume_last_entity_id: self.last_id_to_open_actor,
+            initialized: self.initialized,
+        }
+    }
+
+    fn initialization_in_progress(&self) -> bool {
+        !self.initialized
     }
 
     fn find_closed(&self, id: EntityId) -> Option<Addr<VolumeActor>> {
@@ -65,19 +111,20 @@ impl ArchivariusActor {
     fn close_current_open_actor(&mut self) {
         let new_id = self.closed_actors.len() + 1;
 
-        let arbeiter_index = new_id % self.arbeiters.len();
+        let arbeiter_index = new_id % self.arbiters.len();
 
         let ty = self.ty;
         let new_open_actor =
-            volume::VolumeActor::start_in_arbiter(&self.arbeiters[arbeiter_index], move |_| {
-                volume::VolumeActor::new(ty,new_id as i32)
+            VolumeActor::start_in_arbiter(&self.arbiters[arbeiter_index], move |_| {
+                VolumeActor::new_open(ty, new_id as i32)
             });
 
         let old_open_actor = replace(&mut self.open_actor, new_open_actor);
 
-        if self.initialization_in_progress {
+        if self.initialization_in_progress() {
             info!("Sending command to persist the chunk");
             old_open_actor.do_send(volume::Persist);
+            // TODO: Must await Persist response to sore Archivarius state
         }
 
         let top_id = self
@@ -90,7 +137,9 @@ impl ArchivariusActor {
             .map(|(last_range, _)| last_range.next_adjacent(top_id))
             .unwrap_or_else(|| EntityRange::from_start(top_id));
 
-        self.closed_actors.push((new_range, old_open_actor))
+        self.closed_actors.push((new_range, old_open_actor));
+
+        self.store.save(self.state());
     }
 }
 
@@ -207,7 +256,7 @@ impl Handler<InitializationFinished> for ArchivariusActor {
     type Result = Arc<()>;
 
     fn handle(&mut self, _msg: InitializationFinished, _ctx: &mut Self::Context) -> Self::Result {
-        self.initialization_in_progress = false;
+        self.initialized = true;
 
         info!("Initialization finished. Sending command to persist the chunk of an open actor");
         self.open_actor.do_send(volume::Persist);
@@ -224,7 +273,7 @@ impl Message for CloseOpenActor {
     type Result = Arc<()>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct EntityRange {
     inner: RangeInclusive<EntityId>,
 }
@@ -248,4 +297,56 @@ pub struct InitializationFinished;
 
 impl Message for InitializationFinished {
     type Result = Arc<()>;
+}
+
+struct ArchivariusStore<P: AsRef<Path>> {
+    path: RwLock<P>,
+}
+
+impl<P: AsRef<Path>> ArchivariusStore<P> {
+    fn new(path: P) -> ArchivariusStore<P> {
+        use std::fs::create_dir_all;
+        create_dir_all(path.as_ref().parent().unwrap()).unwrap();
+        ArchivariusStore {
+            path: RwLock::new(path),
+        }
+    }
+
+    fn load(&self) -> Option<StoredState> {
+        use serde_json::*;
+        use std::fs::read;
+        let path = self.path.read().unwrap();
+
+        read(path.as_ref())
+            .ok()
+            .map(|r| from_slice::<StoredState>(&r).unwrap())
+    }
+
+    fn save(&mut self, state: StoredState) {
+        use serde_json::to_string;
+        use std::fs::write;
+
+        let contents = to_string(&state).unwrap();
+
+        let path = self.path.write().unwrap();
+
+        write(path.as_ref(), contents).unwrap();
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct StoredState {
+    closed: Vec<EntityRange>,
+    open_volume_last_entity_id: Option<EntityId>,
+    initialized: bool, //TODO Should be Option<last event Id> from event stream
+}
+
+impl Default for StoredState {
+    fn default() -> Self {
+        StoredState {
+            closed: vec![],
+            open_volume_last_entity_id: None,
+            initialized: false,
+        }
+    }
 }

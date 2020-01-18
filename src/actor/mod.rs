@@ -16,6 +16,7 @@ impl Message for GetDump {
     type Result = GetDumpResult;
 }
 
+// TODO: Split to UpdateFromEventCommand and Initialize(Entity)Command
 #[derive(Debug)]
 pub struct UpdateCommand {
     pub id: EntityId,

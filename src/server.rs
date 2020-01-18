@@ -19,7 +19,10 @@ pub async fn start(archive_actor: Addr<ArchivariusActor>) -> std::io::Result<()>
     .await
 }
 
-async fn handle_request(_req: HttpRequest, ar: web::Data<Addr<ArchivariusActor>>) -> impl Responder {
+async fn handle_request(
+    _req: HttpRequest,
+    ar: web::Data<Addr<ArchivariusActor>>,
+) -> impl Responder {
     // TODO: As long as we return chunks in order we can make it possible to return only certain
     //       requested ranges of entities
 

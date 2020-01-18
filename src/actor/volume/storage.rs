@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::io;
 use std::path::Path;
 
-pub trait ChunkStorage {
+pub trait VolumeStorage {
     fn load(&self) -> GzippedData;
     fn change<F>(&mut self, f: F) -> usize
     where
@@ -27,12 +27,16 @@ pub enum ClosableStorage<P: AsRef<Path> + Debug> {
 }
 
 impl<P: AsRef<Path> + Clone + Debug> ClosableStorage<P> {
-    pub fn new_open(ty: EntityType, path: P) -> Self {
+    pub(super) fn new_open(ty: EntityType, path: P) -> Self {
         ClosableStorage::Mem {
             storage: MemStorage::new(),
             ty,
             path,
         }
+    }
+
+    pub(super) fn new_closed(ty: EntityType, path: P) -> Self {
+        ClosableStorage::Gz(GzChunkStorage::new(ty, path))
     }
 
     pub fn close(self) -> Self {
@@ -54,7 +58,7 @@ impl<P: AsRef<Path> + Clone + Debug> ClosableStorage<P> {
     }
 }
 
-impl<P: AsRef<Path> + Debug> ChunkStorage for ClosableStorage<P> {
+impl<P: AsRef<Path> + Debug> VolumeStorage for ClosableStorage<P> {
     fn load(&self) -> GzippedData {
         match &self {
             ClosableStorage::Mem { storage, .. } => storage.load(),
@@ -102,7 +106,7 @@ impl Debug for MemStorage {
     }
 }
 
-impl ChunkStorage for MemStorage {
+impl VolumeStorage for MemStorage {
     fn load(&self) -> GzippedData {
         let data = self
             .inner
@@ -133,7 +137,11 @@ pub struct GzChunkStorage<P: AsRef<Path>> {
 }
 
 impl<P: AsRef<Path>> GzChunkStorage<P> {
-    pub fn new_initialized(ty: EntityType, path: P, data: GzippedData) -> Self {
+    pub(super) fn new(ty: EntityType, path: P) -> Self {
+        GzChunkStorage { ty, path }
+    }
+
+    pub(super) fn new_initialized(ty: EntityType, path: P, data: GzippedData) -> Self {
         let s = GzChunkStorage { ty, path };
         s.store(data);
         s
@@ -189,7 +197,7 @@ impl<P: AsRef<Path>> GzChunkStorage<P> {
     }
 }
 
-impl<P: AsRef<Path>> ChunkStorage for GzChunkStorage<P> {
+impl<P: AsRef<Path>> VolumeStorage for GzChunkStorage<P> {
     fn load(&self) -> GzippedData {
         self.load()
     }
