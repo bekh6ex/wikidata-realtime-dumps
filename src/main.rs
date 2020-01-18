@@ -6,7 +6,7 @@ use futures::{self, StreamExt};
 
 use crate::actor::archivarius::{ArchivariusActor, InitializationFinished};
 use crate::actor::UpdateCommand;
-use crate::events::get_update_stream;
+use crate::events::{get_current_event_id, get_update_stream, EventId};
 use crate::prelude::EntityType;
 use futures::future::ready;
 use futures::stream::once;
@@ -31,20 +31,14 @@ async fn main() -> std::io::Result<()> {
     // TODO Fix data race: If entity gets deleted while initialization is happening there might be a race
     let entity_type = EntityType::Property;
 
-    let init_stream = init::init(entity_type).await;
-
-    // TODO: Update stream last-event-id should be read and stream can only be started after init is done
-    let update_stream = get_update_stream(entity_type).await;
-
     let archive_actor = ArchivariusActor::new(entity_type).start();
 
-    let archive_actor_for_stream = archive_actor.clone();
-    let archive_actor_for_stream2 = archive_actor.clone();
+    let initial_event_id = initialize(entity_type, archive_actor.clone()).await;
 
-    let init_finished_stream = once(ready(None));
+    let update_stream = get_update_stream(entity_type, initial_event_id).await;
 
     let send_forward = |e: UpdateCommand| {
-        let archive_actor_for_stream = archive_actor_for_stream.clone();
+        let archive_actor_for_stream = archive_actor.clone();
         async_std::task::spawn(async move {
             let result = archive_actor_for_stream
                 .send(e)
@@ -59,6 +53,35 @@ async fn main() -> std::io::Result<()> {
     };
 
     let update_stream = update_stream.for_each(send_forward);
+
+    let server_started = server::start(archive_actor.clone());
+
+    let _ = futures::future::join(update_stream, server_started).await;
+    Ok(())
+}
+
+async fn initialize(ty: EntityType, actor: Addr<ArchivariusActor>) -> EventId {
+    let initial_event_id = get_current_event_id().await;
+
+    let init_stream = init::init(ty).await;
+
+    let init_finished_stream = once(ready(None));
+
+    let send_forward = |e: UpdateCommand| {
+        let archive_actor_for_stream = actor.clone();
+        async_std::task::spawn(async move {
+            let result = archive_actor_for_stream
+                .send(e)
+                .await
+                .expect("Actor communication failed")
+                .expect("ArchiveActor have failed")
+                .await;
+            // TODO: Should get last event id here
+            debug!("Got update result {:?} ", result);
+            ()
+        })
+    };
+
     let init_stream = init_stream
         .map(Option::Some)
         .chain(init_finished_stream)
@@ -66,7 +89,7 @@ async fn main() -> std::io::Result<()> {
             async {
                 match e {
                     None => {
-                        archive_actor_for_stream2.do_send(InitializationFinished);
+                        actor.do_send(InitializationFinished);
                     }
                     Some(event) => {
                         send_forward(event).await;
@@ -75,8 +98,7 @@ async fn main() -> std::io::Result<()> {
             }
         });
 
-    let server_started = server::start(archive_actor);
+    init_stream.await;
 
-    let _ = futures::future::join3(update_stream, init_stream, server_started).await;
-    Ok(())
+    initial_event_id
 }

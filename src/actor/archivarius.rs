@@ -29,12 +29,13 @@ pub struct ArchivariusActor {
     open_actor: Addr<VolumeActor>,
     last_id_to_open_actor: Option<EntityId>,
     arbiters: Vec<Arbiter>,
+    // initialized_up_to - last EntityId of persisted actor
+    // last_processed_event_id
 }
 
 impl ArchivariusActor {
     pub fn new(ty: EntityType) -> ArchivariusActor {
-        let store =
-            ArchivariusStore::new(format!("/tmp/wd-rt-dumps/{:?}/archivarius.json", ty));
+        let store = ArchivariusStore::new(format!("/tmp/wd-rt-dumps/{:?}/archivarius.json", ty));
 
         let state = store.load().unwrap_or_default();
 

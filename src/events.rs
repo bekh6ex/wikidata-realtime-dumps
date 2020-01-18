@@ -17,6 +17,11 @@ use super::prelude::*;
 
 const WIKIDATA: &str = "wikidatawiki";
 
+pub async fn get_current_event_id() -> EventId {
+    let inner = get_top_event_id(None).await;
+    EventId { inner }
+}
+
 fn create_client() -> Client {
     ClientBuilder::new()
         .timeout(Duration::from_secs(30))
@@ -24,18 +29,26 @@ fn create_client() -> Client {
         .finish()
 }
 
-async fn create_stream() -> impl Stream<Item = Event> {
+async fn create_stream(event_id: Option<String>) -> impl Stream<Item = Event> {
     let client = Arc::new(create_client());
-
-    let response = client
+    let mut request = client
         .get("https://stream.wikimedia.org/v2/stream/recentchange")
-        .header("User-Agent", "Actix-web")
+        .header("User-Agent", "Actix-web");
+
+    if let Some(ref id) = event_id {
+        request = request.header::<_, &str>("Last-Event-ID", id.as_ref())
+    }
+
+    let response = request
         .timeout(Duration::from_secs(600))
         .send()
         .await
         .expect("response");
 
-    info!("Event stream started");
+    info!(
+        "Event stream started from event: {}",
+        event_id.unwrap_or("<last>".into())
+    );
     trace!("Got response from stream API: {:?}", response);
     let async_read = response
         .into_stream()
@@ -60,11 +73,19 @@ async fn create_stream() -> impl Stream<Item = Event> {
         .map(|r| r.unwrap())
 }
 
-pub async fn get_update_stream(ty: EntityType) -> impl Stream<Item = UpdateCommand> {
+pub async fn get_update_stream(
+    ty: EntityType,
+    event_id: EventId,
+) -> impl Stream<Item = UpdateCommand> {
+    use futures::stream::once;
+
     let client_for_entities = Arc::new(create_client());
 
     continuous_stream::ContinuousStream::new(
-        |_| futures::stream::once(create_stream()).flatten(),
+        move |id| {
+            let id = id.unwrap_or(event_id.inner.clone());
+            once(create_stream(Some(id))).flatten()
+        },
         1000,
     )
     .filter_map(|event| {
@@ -100,6 +121,28 @@ pub async fn get_update_stream(ty: EntityType) -> impl Stream<Item = UpdateComma
             Some(entity_result.into())
         }
     })
+}
+
+async fn get_top_event_id(from: Option<String>) -> String {
+    let (id, _) = create_stream(from)
+        .await
+        .filter_map(|e: Event| {
+            let option: Option<String> = match e {
+                Event::LastEventId { id } => Some(id),
+                _ => None,
+            };
+            ready(option)
+        })
+        .take(1)
+        .into_future()
+        .await;
+
+    id.unwrap()
+}
+
+#[derive(Debug, Clone)]
+pub struct EventId {
+    inner: String,
 }
 
 mod continuous_stream {
@@ -241,4 +284,22 @@ struct RevisionData {
 #[derive(Deserialize, Debug)]
 struct WikidataResponse {
     entities: serde_json::Map<String, serde_json::Value>,
+}
+
+#[cfg(test)]
+mod test {
+
+    use super::get_top_event_id;
+    use actix_rt;
+
+    #[actix_rt::test]
+    async fn can_get_top_event_id() {
+        let given_id = get_top_event_id(None).await;
+
+        let id1 = get_top_event_id(Some(given_id.clone())).await;
+
+        let id2 = get_top_event_id(Some(given_id.clone())).await;
+
+        assert_eq!(id1, id2)
+    }
 }
