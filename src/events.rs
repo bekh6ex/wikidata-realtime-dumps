@@ -2,10 +2,9 @@ use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 use std::time::Duration;
 
-use actix::prelude::Stream;
-use actix_web::client::{Client, ClientBuilder, Connector, PayloadError};
+use actix_web::client::{Client, ClientBuilder, Connector};
 use futures::future::ready;
-use futures::{StreamExt, TryStreamExt};
+use futures::{Stream, StreamExt, TryStreamExt};
 use log::*;
 use serde::Deserialize;
 use sse_codec::{decode_stream, Event};
@@ -18,8 +17,9 @@ use super::prelude::*;
 const WIKIDATA: &str = "wikidatawiki";
 
 pub async fn get_current_event_id() -> EventId {
-    let inner = get_top_event_id(None).await;
-    EventId::new(inner)
+    // TODO Should be not current but the one before that.
+
+    get_top_event_id(None).await
 }
 
 fn create_client() -> Client {
@@ -32,27 +32,33 @@ fn create_client() -> Client {
 
 
 async fn create_raw_stream(event_id: Option<String>) -> impl Stream<Item = Event> {
-    let client = Arc::new(create_client());
-    let mut request = client
-        .get("https://stream.wikimedia.org/v2/stream/recentchange")
-        .header("User-Agent", "Actix-web");
+    use hyper::{Client, Request, Body};
+    use hyper_rustls;
 
-    if let Some(ref id) = event_id {
-        request = request.header::<_, &str>("Last-Event-ID", id.as_ref())
+    let client1 = Client::builder()
+        .build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new());
+
+
+    let mut req = Request::builder()
+        .method("GET")
+         .uri("https://stream.wikimedia.org/v2/stream/recentchange");
+    if event_id.is_some() {
+        req = req.header("last-event-id", event_id.clone().unwrap());
     }
 
-    let response = request
-        .timeout(Duration::from_secs(600))
-        .send()
-        .await
-        .expect("response");
+    trace!("Sending request: {:?}", req);
+
+    let resp = client1.request(req.body(Body::empty()).unwrap()).await.unwrap();
+
 
     info!(
         "Event stream started from event: {}",
         event_id.unwrap_or("<last>".into())
     );
-    trace!("Got response from stream API: {:?}", response);
-    let async_read = response
+    trace!("Got response from stream API: {:?}", resp);
+    let body1 = resp.into_body();
+
+    let async_read = body1
         .into_stream()
         .map(|c| {
             trace!("Stream Body Chunk: {:?}", c);
@@ -62,7 +68,7 @@ async fn create_raw_stream(event_id: Option<String>) -> impl Stream<Item = Event
             error!("Stream error: {:?}", e);
             e
         })
-        .map_err(|e: PayloadError| Error::new(ErrorKind::Other, format!("{:?}", e)))
+        .map_err(|e: hyper::error::Error| Error::new(ErrorKind::Other, format!("{:?}", e)))
         .into_async_read();
 
     decode_stream(async_read)
@@ -125,24 +131,56 @@ pub async fn get_update_stream(
     })
 }
 
-async fn get_top_event_id(from: Option<String>) -> String {
-    let (id, _) = create_raw_stream(from)
+async fn id_stream(from: Option<EventId>) -> impl Stream<Item = EventId> {
+    create_raw_stream(from.map(|id| id.inner))
         .await
         .filter_map(|e: Event| {
-            let option: Option<String> = match e {
-                Event::LastEventId { id } => Some(id),
+            let option: Option<EventId> = match e {
+                Event::LastEventId { id } => Some(EventId::new(id)),
                 _ => None,
             };
             ready(option)
         })
-        .take(1)
+}
+
+async fn get_top_event_id(from: Option<EventId>) -> EventId {
+    let id_stream = id_stream(from).await;
+    let (id, _) = id_stream
         .into_future()
         .await;
 
     id.unwrap()
 }
 
-#[derive(Debug, Clone)]
+async fn get_proper_event_stream(event_id: Option<EventId>) -> impl Stream<Item = ProperEvent> {
+
+    let stream = create_raw_stream(event_id.map(|i| i.inner)).await;
+
+
+    stream
+        .chunks(2)
+        .map(|ch: Vec<Event>| {
+            let s = ch.as_slice();
+
+            match s {
+
+                [Event::LastEventId {id}, Event::Message {data, ..}] => {
+                    let data = serde_json::from_str(&data).unwrap();
+                    ProperEvent {id: EventId::new(id.clone()), data }
+                }
+                _ => panic!()
+
+            }
+        })
+}
+
+struct ProperEvent {
+    id: EventId,
+    data: EventData
+}
+
+
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct EventId {
     inner: String,
 }
@@ -274,7 +312,7 @@ mod continuous_stream {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, PartialEq)]
 struct EventData {
     wiki: String,
     title: String,
@@ -285,7 +323,7 @@ struct EventData {
     revision: Option<RevisionData>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, PartialEq)]
 struct RevisionData {
     new: u64,
 }
@@ -300,15 +338,31 @@ mod test {
 
     use super::get_top_event_id;
     use actix_rt;
+    use crate::events::{get_proper_event_stream, id_stream, EventId, ProperEvent, EventData};
+    use futures::{Stream, StreamExt};
+    use std::time::Duration;
+
 
     #[actix_rt::test]
     async fn can_get_top_event_id() {
-        let given_id = get_top_event_id(None).await;
+        let initial_id = get_top_event_id(None).await;
 
-        let id1 = get_top_event_id(Some(given_id.clone())).await;
+        let data1 = get_top_event_data(initial_id.clone()).await;
+        let data2 = get_top_event_data(initial_id.clone()).await;
 
-        let id2 = get_top_event_id(Some(given_id.clone())).await;
+        assert_eq!(data1, data2);
+    }
 
-        assert_eq!(id1, id2)
+    async fn get_top_event_data(from: EventId) -> EventData {
+        let stream = get_proper_event_stream(Some(from)).await;
+        let (event, _) = stream.into_future().await;
+        event.expect("Not found").data
+    }
+
+    #[actix_rt::test]
+    async fn smoketest_get_proper_event_stream() {
+        let stream = get_proper_event_stream(None).await;
+        let (event, _) = stream.into_future().await;
+        event.expect("Not found");
     }
 }
