@@ -32,7 +32,6 @@ fn create_client() -> Client {
 
 async fn create_raw_stream(event_id: Option<String>) -> impl Stream<Item = Event> {
     use hyper::{Body, Client, Request};
-    use hyper_rustls;
 
     let client = Client::builder().build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new());
 
@@ -92,8 +91,6 @@ pub async fn get_update_stream(
     ty: EntityType,
     event_id: EventId,
 ) -> impl Stream<Item = UpdateCommand> {
-    use futures::stream::once;
-
     let client_for_entities = Arc::new(create_client());
 
     get_proper_event_stream(Some(event_id))

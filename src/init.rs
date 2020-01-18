@@ -10,7 +10,6 @@ use futures::Stream;
 use log::*;
 use serde::Deserialize;
 
-use crate::events::EventId;
 use std::sync::Arc;
 use std::time::Duration;
 

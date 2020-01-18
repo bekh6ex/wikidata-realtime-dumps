@@ -1,5 +1,4 @@
-use crate::actor::{SerializedEntity, UpdateCommand};
-use crate::events::EventId;
+use crate::actor::SerializedEntity;
 use crate::prelude::*;
 use actix_web::client::{Client, SendRequestError};
 use actix_web::error::PayloadError;

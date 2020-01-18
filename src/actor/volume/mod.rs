@@ -1,6 +1,6 @@
 use super::SerializedEntity;
 use crate::actor::UpdateChunkCommand;
-use actix::{Actor, Context, Handler, Message};
+use actix::{Actor, Context, Handler, Message, MessageResult};
 use actix_web::web::Bytes;
 
 use log::*;
@@ -87,21 +87,19 @@ impl Handler<UpdateChunkCommand> for VolumeActor {
 
 pub(super) struct GetChunk;
 
-pub type GetChunkResult = Result<Bytes, ()>;
-
 impl Message for GetChunk {
-    type Result = GetChunkResult;
+    type Result = Bytes;
 }
 
 impl Handler<GetChunk> for VolumeActor {
-    type Result = GetChunkResult;
+    type Result = MessageResult<GetChunk>;
 
     fn handle(&mut self, _msg: GetChunk, _ctx: &mut Self::Context) -> Self::Result {
         let thread1 = std::thread::current();
         let thread = thread1.name().unwrap_or("<unknown>").to_owned();
         debug!("thread={} Get chunk: i={}", thread, self.i);
         let res = self.load().to_bytes();
-        Ok(res)
+        MessageResult(res)
     }
 }
 

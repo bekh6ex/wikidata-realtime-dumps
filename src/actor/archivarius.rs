@@ -6,12 +6,13 @@ use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 
 use actix::{Actor, Addr, Arbiter, AsyncContext, Context, Handler, Message, MessageResult};
+use bytes::Bytes;
 use futures::stream::iter;
 use futures::StreamExt;
 use log::*;
 use serde::{Deserialize, Serialize};
 
-use crate::actor::volume::{GetChunk, GetChunkResult, VolumeActor};
+use crate::actor::volume::{GetChunk, VolumeActor};
 use crate::actor::{GetDump, GetDumpResult, UpdateChunkCommand, UpdateCommand};
 use crate::events::EventId;
 use crate::prelude::*;
@@ -198,13 +199,10 @@ impl Handler<GetDump> for ArchivariusActor {
         let stream = iter(children)
             .map(|c| c.send(GetChunk))
             .buffered(ARBITERS)
-            .map(|r| {
-                let b: GetChunkResult = r.expect("Actor communication issue");
-                b
-            })
-            .filter_map(|b: GetChunkResult| {
+            .map(|r| r.expect("Actor communication issue"))
+            .filter_map(|b: Bytes| {
                 async {
-                    let b = b.expect("Failed to get chunk");
+                    let b = b;
                     if b.len() == 0 {
                         None
                     } else {
