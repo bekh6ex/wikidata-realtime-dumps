@@ -17,10 +17,6 @@ impl Message for GetDump {
     type Result = GetDumpResult;
 }
 
-pub struct InitCommand {
-    pub entity: SerializedEntity,
-}
-
 // TODO: Split to UpdateFromEventCommand and Initialize(Entity)Command
 #[derive(Debug)]
 pub struct UpdateCommand {

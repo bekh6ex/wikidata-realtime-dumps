@@ -4,7 +4,7 @@ use log::*;
 
 use futures::{self, StreamExt};
 
-use crate::actor::archivarius::{ArchivariusActor, InitializationFinished};
+use crate::actor::archivarius::{ArchivariusActor, InitializationFinished, StartInitialization};
 use crate::actor::UpdateCommand;
 use crate::events::{get_current_event_id, get_update_stream, EventId};
 use crate::prelude::EntityType;
@@ -28,7 +28,6 @@ async fn main() -> std::io::Result<()> {
 
     info!("Starting...");
 
-    // TODO Fix data race: If entity gets deleted while initialization is happening there might be a race
     let entity_type = EntityType::Property;
 
     let archive_actor = ArchivariusActor::new(entity_type).start();
@@ -46,9 +45,7 @@ async fn main() -> std::io::Result<()> {
                 .expect("Actor communication failed")
                 .expect("ArchiveActor have failed")
                 .await;
-            // TODO: Should get last event id here
-            debug!("Got update result {:?} ", result);
-            ()
+            trace!("Got command result {:?}.", result);
         })
     };
 
@@ -61,9 +58,16 @@ async fn main() -> std::io::Result<()> {
 }
 
 async fn initialize(ty: EntityType, actor: Addr<ArchivariusActor>) -> EventId {
-    let initial_event_id = get_current_event_id().await;
+    let current = get_current_event_id();
 
-    let init_stream = init::init(ty).await;
+    let response = actor
+        .send(StartInitialization)
+        .await
+        .expect("Failed commun");
+
+    let initial_event_id: EventId = response.last_event_id.unwrap_or(current.await);
+
+    let init_stream = init::init(ty, response.initialized_up_to).await;
 
     let init_finished_stream = once(ready(None));
 

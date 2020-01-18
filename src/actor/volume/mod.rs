@@ -22,7 +22,7 @@ pub struct VolumeActor {
 }
 
 impl VolumeActor {
-    pub fn new_open(ty: EntityType, i: i32) -> VolumeActor {
+    pub fn in_memory(ty: EntityType, i: i32) -> VolumeActor {
         VolumeActor {
             i,
             storage: Some(ClosableStorage::new_open(
@@ -32,7 +32,7 @@ impl VolumeActor {
         }
     }
 
-    pub fn new_closed(ty: EntityType, i: i32) -> Self {
+    pub fn persistent(ty: EntityType, i: i32) -> Self {
         VolumeActor {
             i,
             storage: Some(ClosableStorage::new_closed(

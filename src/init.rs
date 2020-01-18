@@ -14,11 +14,11 @@ use crate::events::EventId;
 use std::sync::Arc;
 use std::time::Duration;
 
-pub async fn init(ty: EntityType) -> impl Stream<Item = UpdateCommand> {
+pub async fn init(ty: EntityType, start_id: Option<EntityId>) -> impl Stream<Item = UpdateCommand> {
     let latest_id = get_latest_entity_id(ty).await;
     let safety_offset = 100;
 
-    let min = 1;
+    let min = start_id.map(|i| i.n()).unwrap_or(1);
     let max = latest_id.n() + safety_offset;
 
     let client = Arc::new(create_client());
@@ -29,7 +29,7 @@ pub async fn init(ty: EntityType) -> impl Stream<Item = UpdateCommand> {
         .map(move |n| ty.id(n))
         .map(move |id| {
             if id.n() == min {
-                info!("Init stream for {:?} started", ty);
+                info!("Init stream for {:?} started from {:?}", ty, start_id);
             }
             if id.n() % 100 == 0 {
                 info!("Initializing entity {}", id);
