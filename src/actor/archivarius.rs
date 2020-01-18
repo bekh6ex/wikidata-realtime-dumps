@@ -20,8 +20,8 @@ use super::volume;
 
 const ARBITERS: usize = 8;
 
-//const MAX_CHUNK_SIZE: usize = 22 * 1024 * 1024;
-const MAX_CHUNK_SIZE: usize = 5 * 1024 * 1024;
+const MAX_CHUNK_SIZE: usize = 22 * 1024 * 1024;
+//const MAX_CHUNK_SIZE: usize = 5 * 1024 * 1024;
 
 pub struct ArchivariusActor {
     store: ArchivariusStore<String>,
@@ -303,7 +303,7 @@ impl Handler<UpdateLastEventEventId> for ArchivariusActor {
     fn handle(
         &mut self,
         UpdateLastEventEventId(event_id): UpdateLastEventEventId,
-        ctx: &mut Self::Context,
+        _ctx: &mut Self::Context,
     ) -> Self::Result {
         self.last_processed_event_id = Some(event_id);
 
@@ -325,7 +325,7 @@ impl Message for StartInitialization {
 impl Handler<StartInitialization> for ArchivariusActor {
     type Result = MessageResult<StartInitialization>;
 
-    fn handle(&mut self, msg: StartInitialization, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, _msg: StartInitialization, _ctx: &mut Self::Context) -> Self::Result {
         let initialized_up_to = if self.everything_is_persisted {
             self.last_id_to_open_actor
         } else {

@@ -34,7 +34,7 @@ async fn create_raw_stream(event_id: Option<String>) -> impl Stream<Item = Event
     use hyper::{Body, Client, Request};
     use hyper_rustls;
 
-    let client1 = Client::builder().build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new());
+    let client = Client::builder().build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new());
 
     let mut req = Request::builder()
         .method("GET")
@@ -45,7 +45,7 @@ async fn create_raw_stream(event_id: Option<String>) -> impl Stream<Item = Event
 
     trace!("Sending request: {:?}", req);
 
-    let resp = client1
+    let resp = client
         .request(req.body(Body::empty()).unwrap())
         .await
         .unwrap();
@@ -79,6 +79,13 @@ async fn create_raw_stream(event_id: Option<String>) -> impl Stream<Item = Event
             ready(decoding_result.is_ok())
         })
         .map(|r| r.unwrap())
+        .enumerate()
+        .map(|(index, ev)| {
+            if index == 0 {
+                info!("Stream started from {:?}", ev)
+            }
+            ev
+        })
 }
 
 pub async fn get_update_stream(

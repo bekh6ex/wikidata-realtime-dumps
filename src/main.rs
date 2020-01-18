@@ -20,13 +20,11 @@ mod server;
 
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {
-    std::env::set_var(
-        "RUST_LOG",
-        "wikidata_realtime_dumps=info,actix_server=info,actix_web=info",
-    );
-    env_logger::init();
+    init_logger();
 
     info!("Starting...");
+
+    // TODO: Lock storage file
 
     let entity_type = EntityType::Property;
 
@@ -105,4 +103,8 @@ async fn initialize(ty: EntityType, actor: Addr<ArchivariusActor>) -> EventId {
     init_stream.await;
 
     initial_event_id
+}
+
+fn init_logger() {
+    log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
 }
