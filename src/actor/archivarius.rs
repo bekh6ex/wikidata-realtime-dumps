@@ -11,7 +11,7 @@ use log::*;
 use serde::{Deserialize, Serialize};
 
 use crate::actor::volume::{GetChunk, VolumeActor};
-use crate::actor::{GetDump, GetDumpResult, UpdateChunkCommand, UpdateCommand, UnitFuture};
+use crate::actor::{GetDump, GetDumpResult, UnitFuture, UpdateChunkCommand, UpdateCommand};
 use crate::events::EventId;
 use crate::prelude::*;
 
