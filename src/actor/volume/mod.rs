@@ -97,7 +97,7 @@ impl Handler<GetChunk> for VolumeActor {
         let thread1 = std::thread::current();
         let thread = thread1.name().unwrap_or("<unknown>").to_owned();
         debug!("thread={} Get chunk: i={}", thread, self.i);
-        let res = self.load().to_bytes();
+        let res = self.load().into_bytes();
         MessageResult(res)
     }
 }

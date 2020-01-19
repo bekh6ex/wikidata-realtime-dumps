@@ -10,11 +10,15 @@ use futures::Stream;
 use log::*;
 use serde::Deserialize;
 
+use crate::events::EventId;
 use std::sync::Arc;
 use std::time::Duration;
-use crate::events::EventId;
 
-pub async fn init(ty: EntityType, start_id: Option<EntityId>, event_id: EventId) -> impl Stream<Item = UpdateCommand> {
+pub async fn init(
+    ty: EntityType,
+    start_id: Option<EntityId>,
+    event_id: EventId,
+) -> impl Stream<Item = UpdateCommand> {
     let latest_id = get_latest_entity_id(ty).await;
     let safety_offset = 100;
 
@@ -42,10 +46,10 @@ pub async fn init(ty: EntityType, start_id: Option<EntityId>, event_id: EventId)
         .map(move |id| get_entity(client.clone(), id))
         .buffered(100)
         .filter_map(move |e: Option<GetEntityResult>| {
-            let event_id =event_id.clone();
+            let event_id = event_id.clone();
             ready(e.map(move |e| UpdateCommand {
                 event_id: Some(event_id),
-                entity: e.to_serialized_entity(),
+                entity: e.into_serialized_entity(),
             }))
         })
 }
@@ -83,12 +87,14 @@ async fn get_latest_entity_id(ty: EntityType) -> EntityId {
         })
         .unwrap();
 
-    let unser: QueryResponse =
-        serde_json::from_slice::<QueryResponse>(body.as_ref()).expect(&format!(
-            "Invalid response format: {:?}\n{:?}",
-            &ty,
-            std::str::from_utf8(body.as_ref())
-        ));
+    let unser: QueryResponse = serde_json::from_slice::<QueryResponse>(body.as_ref())
+        .unwrap_or_else(|_| {
+            panic!(
+                "Invalid response format: {:?}\n{:?}",
+                &ty,
+                std::str::from_utf8(body.as_ref())
+            )
+        });
 
     let title = &unser
         .query

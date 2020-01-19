@@ -78,7 +78,7 @@ fn change_timeout(factor: f32) -> u64 {
     let timeout: f32 = initial_timeout as f32 * factor;
     let mut timeout = timeout.round() as u64;
     if timeout == initial_timeout && timeout != 0 {
-        timeout = timeout - 1;
+        timeout -= 1;
     }
 
     timeout = timeout.min(MAX_TIMEOUT);
@@ -97,7 +97,7 @@ async fn get_entity_internal(
     ));
 
     debug!("Sending get entity request. id={}", id);
-    let mut response = req.send().await.map_err(|e| Error::GetResponse(e))?;
+    let mut response = req.send().await.map_err(Error::GetResponse)?;
 
     debug!(
         "Got entity response. status={} id={}",
@@ -113,7 +113,7 @@ async fn get_entity_internal(
         .body()
         .limit(8 * 1024 * 1024)
         .await
-        .map_err(|e| Error::GetResponseBody(e))?;
+        .map_err(Error::GetResponseBody)?;
 
     let response = serde_json::from_slice::<WikidataResponse>(body.as_ref()).map_err(|e| {
         Error::ResponseFormat {
@@ -131,8 +131,8 @@ async fn get_entity_internal(
 
     let value = value.unwrap();
 
-    let data =
-        serde_json::to_string(value).expect(&format!("Serialize {} entity back failed O_o", id));
+    let data = serde_json::to_string(value)
+        .unwrap_or_else(|_| panic!("Serialize {} entity back failed O_o", id));
 
     let revision = RevisionId(extract_revision_id(id, value));
 
@@ -152,11 +152,11 @@ pub enum Error {
 fn extract_revision_id(id: EntityId, value: &Value) -> u64 {
     value
         .as_object()
-        .expect(&format!("Entity {} representation was not an object", id))
+        .unwrap_or_else(|| panic!("Entity {} representation was not an object", id))
         .get("lastrevid")
-        .expect(&format!("Entity {} does not contain revision ID", id))
+        .unwrap_or_else(|| panic!("Entity {} does not contain revision ID", id))
         .as_u64()
-        .expect(&format!("Entity {} revision ID is not a u64", id))
+        .unwrap_or_else(|| panic!("Entity {} revision ID is not a u64", id))
 }
 
 pub struct GetEntityResult {
@@ -166,7 +166,7 @@ pub struct GetEntityResult {
 }
 
 impl GetEntityResult {
-    pub fn to_serialized_entity(self) -> SerializedEntity {
+    pub fn into_serialized_entity(self) -> SerializedEntity {
         let GetEntityResult { id, revision, data } = self;
         SerializedEntity { id, revision, data }
     }

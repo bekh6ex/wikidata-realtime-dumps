@@ -12,11 +12,11 @@ pub enum EntityType {
 }
 
 impl EntityType {
-    pub fn id(&self, n: u32) -> EntityId {
-        EntityId { ty: *self, id: n }
+    pub fn id(self, n: u32) -> EntityId {
+        EntityId { ty: self, id: n }
     }
 
-    pub fn namespace(&self) -> NamespaceId {
+    pub fn namespace(self) -> NamespaceId {
         match self {
             EntityType::Item => NamespaceId { n: 0, s: None },
             EntityType::Property => NamespaceId {
@@ -30,7 +30,7 @@ impl EntityType {
         }
     }
 
-    fn prefix(&self) -> &'static str {
+    fn prefix(self) -> &'static str {
         match self {
             EntityType::Item => "Q",
             EntityType::Property => "P",
@@ -38,7 +38,7 @@ impl EntityType {
         }
     }
 
-    pub fn parse_from_title(&self, title: &str) -> Option<EntityId> {
+    pub fn parse_from_title(self, title: &str) -> Option<EntityId> {
         match self.namespace().s {
             None => self.parse_id(title),
             Some(ns) => {
@@ -57,8 +57,8 @@ impl EntityType {
         }
     }
 
-    pub fn parse_id(&self, s: &str) -> Option<EntityId> {
-        if s.len() == 0 {
+    pub fn parse_id(self, s: &str) -> Option<EntityId> {
+        if s.is_empty() {
             error!("Cannot parse empty ID: type={:?}", self);
             return None;
         }
@@ -73,7 +73,7 @@ impl EntityType {
                 .map_err(|e| error!("Error while parsing ID '{}': {:?}", s, e))
                 .ok();
 
-            id.map(|n| EntityId { ty: *self, id: n })
+            id.map(|n| EntityId { ty: self, id: n })
         }
     }
 }
@@ -85,13 +85,13 @@ pub struct EntityId {
 }
 
 impl EntityId {
-    pub fn ty(&self) -> EntityType {
+    pub fn ty(self) -> EntityType {
         self.ty
     }
-    pub fn n(&self) -> u32 {
+    pub fn n(self) -> u32 {
         self.id
     }
-    pub fn next(&self) -> EntityId {
+    pub fn next(self) -> EntityId {
         EntityId {
             ty: self.ty,
             id: self.id + 1,

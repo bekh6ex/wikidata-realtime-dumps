@@ -84,7 +84,7 @@ impl ArchivariusActor {
             closed_actors,
             open_actor,
             last_id_to_open_actor,
-            last_processed_event_id: state.last_processed_event_id.clone(),
+            last_processed_event_id: state.last_processed_event_id,
         }
     }
 
@@ -104,23 +104,19 @@ impl ArchivariusActor {
     }
 
     fn find_closed(&self, id: EntityId) -> Option<Addr<VolumeActor>> {
-        let target_actor = self
-            .closed_actors
+        self.closed_actors
             .iter()
             .find(|(range, _actor)| range.inner.contains(&id))
-            .map(|(_, a)| a.clone());
-        target_actor
+            .map(|(_, a)| a.clone())
     }
 
     fn find_volume(&self, id: EntityId) -> (bool, Addr<VolumeActor>) {
         let target_actor = self.find_closed(id);
 
-        let actor_tuple = match target_actor {
+        match target_actor {
             Some(actor) => (false, actor),
             None => (true, self.open_actor.clone()),
-        };
-
-        actor_tuple.clone()
+        }
     }
 
     fn maybe_close_the_open_volume(self_addr: &Addr<Self>, child: Addr<VolumeActor>, size: usize) {
@@ -202,8 +198,7 @@ impl Handler<GetDump> for ArchivariusActor {
             .map(|r| r.expect("Actor communication issue"))
             .filter_map(|b: Bytes| {
                 async {
-                    let b = b;
-                    if b.len() == 0 {
+                    if b.is_empty() {
                         None
                     } else {
                         Some(b)
@@ -327,9 +322,7 @@ impl Handler<StartInitialization> for ArchivariusActor {
         let initialized_up_to = if self.everything_is_persisted {
             self.last_id_to_open_actor
         } else {
-            self.closed_actors
-                .last()
-                .map(|(r, _)| r.inner.end().clone())
+            self.closed_actors.last().map(|(r, _)| *r.inner.end())
         };
 
         MessageResult(StartInitializationResponse {

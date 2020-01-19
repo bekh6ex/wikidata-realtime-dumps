@@ -39,7 +39,7 @@ fn with_actor(
     warp::any().map(move || ar.clone())
 }
 
-const ENTITY_NAMES: [(&'static str, EntityType); 3] = [
+const ENTITY_NAMES: [(&str, EntityType); 3] = [
     ("properties", EntityType::Property),
     ("items", EntityType::Item),
     ("lexemes", EntityType::Lexeme),
@@ -61,7 +61,7 @@ async fn get_dump_handler(
     ty.split_off(ty.len() - suffix.len());
 
     let ty: Option<&EntityType> = ENTITY_NAMES
-        .into_iter()
+        .iter()
         .find(|(prefix, _)| **prefix == ty)
         .map(|(_, entity_type)| entity_type);
 

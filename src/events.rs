@@ -17,6 +17,34 @@ use super::prelude::*;
 
 const WIKIDATA: &str = "wikidatawiki";
 
+///
+/// Event rate analysis results:
+///   Period:
+///     from: 2020-01-12T11:28:53Z (1578828533)
+///     to: 2020-01-12T16:24:02Z (1578846242)
+///
+///     duration: 17709 seconds
+///
+///   Size: 537M (563159040 bytes)
+///   Data rate: 31 kB/s (109 MB/h; 2,6 GB/day)
+///
+///   Number of events: 464473
+///   Event rate: 26 events/s
+///
+///   Number of Wikidata events: 149360
+///      Items: 149187
+///      Properties: 81
+///      Lexeme: 92
+///   Wikidata event rate: 8,5 events/s
+///
+///   Commands to analyze:
+///       Total number of events: `cat event-stream | grep -F 'data: {' | wc -l`
+///       Number of Wikidata events:
+///       Items: `cat event-stream | grep -F '"wiki":"wikidatawiki"' | grep -F '"uri":"https://www.wikidata.org/wiki/Q' | grep -F '"namespace":0' | wc -l`
+///       Properties: `cat event-stream | grep -F '"wiki":"wikidatawiki"' | grep -F '"uri":"https://www.wikidata.org/wiki/Property:P' | grep -F '"namespace":120' | wc -l`
+///       Lexemes: `cat event-stream | grep -F '"wiki":"wikidatawiki"' | grep -F '"uri":"https://www.wikidata.org/wiki/Lexeme:L' | grep -F '"namespace":146' | wc -l`
+///
+
 pub async fn get_current_event_id() -> EventId {
     // TODO Should be not current but the one before that.
 
@@ -54,7 +82,7 @@ async fn create_raw_stream(event_id: Option<String>) -> impl Stream<Item = Event
 
     trace!(
         "Starting SSE stream from event: {}",
-        event_id.unwrap_or("<last>".into())
+        event_id.unwrap_or_else(|| "<last>".into())
     );
 
     let async_read = body1
@@ -118,7 +146,7 @@ pub async fn get_update_stream(
                 let entity_result = get_entity(client, id).await?;
                 Some(UpdateCommand {
                     event_id: Some(event_id),
-                    entity: entity_result.to_serialized_entity(),
+                    entity: entity_result.into_serialized_entity(),
                 })
             }
         })
@@ -154,7 +182,7 @@ async fn get_proper_event_stream(event_id: Option<EventId>) -> impl Stream<Item 
     let stream = continuous_stream::ContinuousStream::new(
         move |id| {
             // TODO: Should rewind event_id couple seconds back. Event has a bit random order of events
-            let id = id.or(event_id.clone().map(|i| i.inner));
+            let id = id.or_else(|| event_id.clone().map(|i| i.inner));
             once(create_raw_stream(id)).flatten()
         },
         1000,
@@ -262,8 +290,7 @@ mod continuous_stream {
 
             let filtered: StreamOfStream<St1> = chain.filter_map(ready::<Option<St1>>);
 
-            let res = filtered.flatten();
-            res
+            filtered.flatten()
         }
     }
 
@@ -336,12 +363,10 @@ struct WikidataResponse {
 
 #[cfg(test)]
 mod test {
-    use std::time::Duration;
-
     use actix_rt;
-    use futures::{Stream, StreamExt};
+    use futures::StreamExt;
 
-    use crate::events::{get_proper_event_stream, id_stream, EventData, EventId, ProperEvent};
+    use crate::events::{get_proper_event_stream, EventData, EventId};
 
     use super::get_top_event_id;
 
@@ -364,6 +389,6 @@ mod test {
     #[actix_rt::test]
     async fn smoketest_get_proper_event_stream() {
         let stream = get_proper_event_stream(None).await;
-        let event = stream.take(1).collect::<Vec<_>>().await.remove(0);
+        let _event = stream.take(1).collect::<Vec<_>>().await.remove(0);
     }
 }

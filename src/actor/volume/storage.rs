@@ -249,7 +249,7 @@ impl GzippedData {
         debug_time!("Total time for changing gzipped {:?} chunk", ty);
         let mut entities = {
             self.decompress()
-                .split("\n")
+                .split('\n')
                 .filter(|l| !l.is_empty())
                 .map(|e: &str| {
                     #[derive(serde::Deserialize)]
@@ -297,7 +297,7 @@ impl GzippedData {
         self.inner.len()
     }
 
-    pub fn to_bytes(self) -> Bytes {
+    pub fn into_bytes(self) -> Bytes {
         Bytes::from(self.inner)
     }
 }
