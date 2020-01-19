@@ -24,6 +24,8 @@ const MAX_TIMEOUT: u64 = 60000;
 static TIMEOUT: AtomicU64 = AtomicU64::new(INITIAL_TIMEOUT);
 const TIMEOUT_INCR: f32 = 1.3;
 const TIMEOUT_REDUCE: f32 = 0.9;
+const MAX_TRIES: u8 = 50;
+
 
 fn with_retries(
     client: Arc<Client>,
@@ -31,7 +33,6 @@ fn with_retries(
     try_number: u8,
 ) -> Pin<Box<dyn Future<Output = Result<Option<GetEntityResult>, Error>>>> {
     Box::pin(async move {
-        const MAX_TRIES: u8 = 5;
 
         debug!("Getting an entity {}. timeout={:?}", id, TIMEOUT);
 

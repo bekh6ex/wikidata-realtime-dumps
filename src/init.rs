@@ -43,7 +43,16 @@ pub async fn init(
             }
             id
         })
-        .map(move |id| get_entity(client.clone(), id))
+        .enumerate()
+        .then( move |(index, id)| {
+            let client = client.clone();
+            async move {
+                // To not make a lot of requests in the same time
+                let timeout = index % 50;
+                async_std::task::sleep(Duration::from_millis(timeout as u64)).await;
+                get_entity(client, id)
+            }
+        })
         .buffered(100)
         .filter_map(move |e: Option<GetEntityResult>| {
             let event_id = event_id.clone();
