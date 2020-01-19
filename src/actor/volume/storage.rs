@@ -191,8 +191,8 @@ impl<P: AsRef<Path>> GzChunkStorage<P> {
                 self.path.as_ref(),
                 data.len()
             );
-            fs::create_dir_all(dir_path).expect("Failed to create a directory");
-            fs::write(self.path.as_ref(), data).expect("Writing failed");
+            fs::create_dir_all(dir_path).expect(&format!("Failed to create directory '{}'", dir_path));
+            fs::write(self.path.as_ref(), data).expect(&format!("Writing to file '{}' failed", self.path.as_ref()));
         }
     }
 }
