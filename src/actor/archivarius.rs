@@ -129,6 +129,8 @@ impl ArchivariusActor {
             self_addr.do_send(CloseOpenActor { addr: child });
 
             if size > MAX_CHUNK_SIZE * 2 {
+                warn!("Size of a chunk is way too big: {}", size)
+            } else if size > MAX_CHUNK_SIZE * 10 {
                 panic!("Size of a chunk is way too big: {}", size)
             }
         }

@@ -98,6 +98,13 @@ pub async fn get_update_stream(
         .filter(move |e: &ProperEvent| {
             ready(e.data.wiki == WIKIDATA && e.data.namespace == ty.namespace().n())
         })
+        .inspect(|e| {
+            let known: Vec<&str> = vec!["edit"];
+
+            if !known.contains(&&e.data.event_type[..]) {
+                info!("Unknown event type '{}'", e.data.event_type);
+            }
+        })
         .filter_map(move |event: ProperEvent| {
             let ProperEvent { id: event_id, data } = event;
             let client = client_for_entities.clone();
@@ -114,6 +121,13 @@ pub async fn get_update_stream(
                     entity: entity_result.to_serialized_entity(),
                 })
             }
+        })
+        .enumerate()
+        .map(move |(i, e)| {
+            if i % 10usize == 0 {
+                info!("Walked {} events for {:?}", i + 1, ty);
+            }
+            e
         })
 }
 
@@ -322,12 +336,14 @@ struct WikidataResponse {
 
 #[cfg(test)]
 mod test {
+    use std::time::Duration;
 
-    use super::get_top_event_id;
-    use crate::events::{get_proper_event_stream, id_stream, EventData, EventId, ProperEvent};
     use actix_rt;
     use futures::{Stream, StreamExt};
-    use std::time::Duration;
+
+    use crate::events::{get_proper_event_stream, id_stream, EventData, EventId, ProperEvent};
+
+    use super::get_top_event_id;
 
     #[actix_rt::test]
     async fn can_get_top_event_id() {

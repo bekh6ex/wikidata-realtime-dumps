@@ -12,8 +12,9 @@ use serde::Deserialize;
 
 use std::sync::Arc;
 use std::time::Duration;
+use crate::events::EventId;
 
-pub async fn init(ty: EntityType, start_id: Option<EntityId>) -> impl Stream<Item = UpdateCommand> {
+pub async fn init(ty: EntityType, start_id: Option<EntityId>, event_id: EventId) -> impl Stream<Item = UpdateCommand> {
     let latest_id = get_latest_entity_id(ty).await;
     let safety_offset = 100;
 
@@ -39,10 +40,11 @@ pub async fn init(ty: EntityType, start_id: Option<EntityId>) -> impl Stream<Ite
             id
         })
         .map(move |id| get_entity(client.clone(), id))
-        .buffered(36)
-        .filter_map(|e: Option<GetEntityResult>| {
-            ready(e.map(|e| UpdateCommand {
-                event_id: None,
+        .buffered(100)
+        .filter_map(move |e: Option<GetEntityResult>| {
+            let event_id =event_id.clone();
+            ready(e.map(move |e| UpdateCommand {
+                event_id: Some(event_id),
                 entity: e.to_serialized_entity(),
             }))
         })
