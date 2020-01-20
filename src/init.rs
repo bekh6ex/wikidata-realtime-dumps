@@ -25,7 +25,10 @@ pub async fn init(
     let min = start_id.map(|i| i.n()).unwrap_or(1);
     let max = latest_id.n() + safety_offset;
 
-    let client = Arc::new(create_client());
+    const MAX_CLIENTS: u32 = 10;
+    let client_pool = Arc::new((0..MAX_CLIENTS).map(|_| {
+        create_client()
+    }).collect::<Vec<_>>());
 
     debug!("Creating init stream for {:?}", ty);
 
@@ -35,7 +38,7 @@ pub async fn init(
             if id.n() == min {
                 info!("Init stream for {:?} started from {:?}", ty, start_id);
             }
-            if id.n() % 100 == 0 {
+            if id.n() % 1000 == 0 {
                 info!("Initializing entity {}", id);
             }
             if id.n() == max {
@@ -45,7 +48,8 @@ pub async fn init(
         })
         .enumerate()
         .then( move |(index, id)| {
-            let client = client.clone();
+            let pool_index = index % client_pool.len();
+            let client = Arc::new(client_pool[pool_index].clone());
             async move {
                 // To not make a lot of requests in the same time
                 let timeout = index % 50;
