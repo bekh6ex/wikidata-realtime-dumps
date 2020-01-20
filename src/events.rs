@@ -106,6 +106,19 @@ async fn create_raw_stream(event_id: Option<String>) -> impl Stream<Item = Event
             ready(decoding_result.is_ok())
         })
         .map(|r| r.unwrap())
+        .chunks(2)
+        .take_while(|v| {
+            let s = v.as_slice();
+            match s {
+                [Event::LastEventId { .. }, Event::Message {  .. }] => ready(true),
+                _ =>  {
+                    warn!("Stopping stream. Wrong set of messages: {:?}", v);
+                    ready(false)
+                },
+            }
+        })
+        .map(|v| futures::stream::iter(v))
+        .flatten()
         .enumerate()
         .map(|(index, ev)| {
             if index == 0 {
