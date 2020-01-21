@@ -2,6 +2,7 @@ use std::cmp::max;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use crate::events::EventId;
 
 struct Tracker<I> {
     pending: Vec<I>,
@@ -61,6 +62,13 @@ where
 pub trait HasPrevious {
     fn previous(&self) -> Self;
 }
+
+impl HasPrevious for EventId {
+    fn previous(&self) -> Self {
+        unimplemented!()
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

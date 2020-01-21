@@ -238,10 +238,8 @@ impl Handler<UpdateCommand> for ArchivariusActor {
 
             let size = result.await.expect("Communication with child failed");
 
-            if let Some(event_id) = event_id {
-                // TODO: This is incorrect as soon as it is asynchronous.
-                self_addr.do_send(UpdateLastEventEventId(event_id));
-            }
+            // TODO: This is incorrect as soon as it is asynchronous.
+            self_addr.do_send(UpdateLastEventEventId(event_id));
 
             if is_open_actor {
                 Self::maybe_close_the_open_volume(&self_addr, child, size);

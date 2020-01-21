@@ -14,6 +14,7 @@ use crate::actor::UpdateCommand;
 use crate::get_entity::get_entity;
 
 use super::prelude::*;
+use std::cmp::Ordering;
 
 const WIKIDATA: &str = "wikidatawiki";
 
@@ -173,7 +174,7 @@ pub async fn get_update_stream(
 }
 
 async fn id_stream(from: Option<EventId>) -> impl Stream<Item = EventId> {
-    create_raw_stream(from.map(|id| id.inner))
+    create_raw_stream(from.map(|id| id.to_string()))
         .await
         .filter_map(|e: Event| {
             let option: Option<EventId> = match e {
@@ -194,8 +195,12 @@ async fn get_top_event_id(from: Option<EventId>) -> EventId {
 async fn get_proper_event_stream(event_id: Option<EventId>) -> impl Stream<Item = ProperEvent> {
     let stream = continuous_stream::ContinuousStream::new(
         move |id| {
-            // TODO: Should rewind event_id couple seconds back. Event has a bit random order of events
-            let id = id.or_else(|| event_id.clone().map(|i| i.inner));
+            let id = id.or_else(|| event_id.clone().map(|i| i.to_string()));
+
+
+            // Rewind EventId couple seconds back. Event stream has a bit random order of events,
+            // so to get all of them we should go back a little.
+            let id = id.map(|i| EventId::new(i).rewind(Duration::from_secs(2)).to_string());
             once(create_raw_stream(id)).flatten()
         },
         1000,
@@ -222,17 +227,81 @@ struct ProperEvent {
     data: EventData,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventId {
-    inner: String,
+    parts: Vec<SerializedEventIdPart>,
 }
 
 impl EventId {
-    // TODO: pub is temporary. Should be removed
-    pub fn new(inner: String) -> Self {
-        EventId { inner }
+    fn new(inner: String) -> Self {
+        let parts = serde_json::from_str::<Vec<SerializedEventIdPart>>(&inner).unwrap_or_else(|e| panic!("Unexpected EventId format: '{}. {}'", inner, e));
+        EventId { parts }
+    }
+
+    fn to_string(&self) -> String {
+        serde_json::to_string(&self.parts).unwrap()
+    }
+
+    fn timestamp_ms(&self) -> u64 {
+        let part = &self.parts[self.timestamp_part_pos()];
+        part.timestamp.unwrap()
+    }
+
+    fn timestamp_part_pos(&self) -> usize {
+        self.parts.iter().position(|p| p.timestamp.is_some()).unwrap_or_else(|| panic!("EventId serialization does not contain timestamp: '{:?}'", self.parts))
+    }
+
+    fn rewind(&self, dur: Duration) -> Self {
+        let ms = dur.as_millis() as u64;
+        let new_timestamp = self.timestamp_ms() - ms;
+        let mut new = self.clone();
+        let pos = new.timestamp_part_pos();
+        new.parts[pos].timestamp = Some(new_timestamp);
+        new
     }
 }
+
+impl PartialOrd for EventId {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.timestamp_ms().partial_cmp(&other.timestamp_ms())
+    }
+}
+
+impl Ord for EventId {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.timestamp_ms().cmp(&other.timestamp_ms())
+    }
+}
+
+impl PartialEq for EventId {
+    fn eq(&self, other: &Self) -> bool {
+        self.timestamp_ms().eq(&other.timestamp_ms())
+    }
+}
+impl Eq for EventId {}
+
+
+///
+/// [
+///  {
+///    "topic": "codfw.mediawiki.recentchange",
+///    "partition": 0,
+///    "offset": -1
+///  },
+///  {
+///    "topic": "eqiad.mediawiki.recentchange",
+///    "partition": 0,
+///    "timestamp": 1579465255001
+///  }
+///]
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct SerializedEventIdPart {
+    topic: String,
+    partition: i8,
+    timestamp: Option<u64>,
+    offset: Option<i8>
+}
+
 
 mod continuous_stream {
     use core::task::{Context, Poll};
