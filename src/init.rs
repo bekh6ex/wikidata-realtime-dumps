@@ -26,9 +26,11 @@ pub async fn init(
     let max = latest_id.n() + safety_offset;
 
     const MAX_CLIENTS: u32 = 10;
-    let client_pool = Arc::new((0..MAX_CLIENTS).map(|_| {
-        create_client()
-    }).collect::<Vec<_>>());
+    let client_pool = Arc::new(
+        (0..MAX_CLIENTS)
+            .map(|_| create_client())
+            .collect::<Vec<_>>(),
+    );
 
     debug!("Creating init stream for {:?}", ty);
 
@@ -47,7 +49,7 @@ pub async fn init(
             id
         })
         .enumerate()
-        .then( move |(index, id)| {
+        .then(move |(index, id)| {
             let pool_index = index % client_pool.len();
             let client = Arc::new(client_pool[pool_index].clone());
             async move {

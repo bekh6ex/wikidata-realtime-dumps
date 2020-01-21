@@ -26,14 +26,12 @@ const TIMEOUT_INCR: f32 = 1.3;
 const TIMEOUT_REDUCE: f32 = 0.9;
 const MAX_TRIES: u8 = 50;
 
-
 fn with_retries(
     client: Arc<Client>,
     id: EntityId,
     try_number: u8,
 ) -> Pin<Box<dyn Future<Output = Result<Option<GetEntityResult>, Error>>>> {
     Box::pin(async move {
-
         debug!("Getting an entity {}. timeout={:?}", id, TIMEOUT);
 
         let r = get_entity_internal(client.clone(), id).await;

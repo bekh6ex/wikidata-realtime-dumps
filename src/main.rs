@@ -75,9 +75,7 @@ async fn get_streams(
             let send_forward = move |e: UpdateCommand| {
                 let result = archive_actor.send(e);
                 async_std::task::spawn(async move {
-                    result.await
-                        .expect("Actor communication failed")
-                        .await;
+                    result.await.expect("Actor communication failed").await;
                     trace!("Got command result.");
                 })
             };
@@ -106,10 +104,7 @@ async fn initialize(ty: EntityType, actor: Addr<ArchivariusActor>) -> EventId {
     let send_forward = |e: UpdateCommand| {
         let result = actor.send(e);
         async_std::task::spawn(async move {
-            result
-                .await
-                .expect("Actor communication failed")
-                .await;
+            result.await.expect("Actor communication failed").await;
             debug!("Got update result");
         })
     };

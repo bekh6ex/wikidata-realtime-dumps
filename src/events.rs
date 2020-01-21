@@ -110,11 +110,11 @@ async fn create_raw_stream(event_id: Option<String>) -> impl Stream<Item = Event
         .take_while(|v| {
             let s = v.as_slice();
             match s {
-                [Event::LastEventId { .. }, Event::Message {  .. }] => ready(true),
-                _ =>  {
+                [Event::LastEventId { .. }, Event::Message { .. }] => ready(true),
+                _ => {
                     warn!("Stopping stream. Wrong set of messages: {:?}", v);
                     ready(false)
-                },
+                }
             }
         })
         .map(|v| futures::stream::iter(v))
