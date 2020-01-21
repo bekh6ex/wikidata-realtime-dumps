@@ -17,6 +17,8 @@ use crate::prelude::*;
 
 use super::volume;
 
+mod tracker;
+
 const ARBITERS: usize = 8;
 
 const MAX_CHUNK_SIZE: usize = 22 * 1024 * 1024;
