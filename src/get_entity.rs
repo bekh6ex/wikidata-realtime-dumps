@@ -12,6 +12,8 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use rand;
+use rand::Rng;
 
 pub async fn get_entity(client: Arc<Client>, id: EntityId) -> Option<GetEntityResult> {
     with_retries(client, id, 1)
@@ -35,6 +37,7 @@ fn with_retries(
         debug!("Getting an entity {}. timeout={:?}", id, TIMEOUT);
 
         let r = get_entity_internal(client.clone(), id).await;
+        let fuzzy =  rand::thread_rng().gen_range(0.9f32, 1.1f32);
 
         use actix_web::client::SendRequestError::*;
         use Error::*;
@@ -44,7 +47,7 @@ fn with_retries(
                 Ok(result)
             }
             Err(GetResponse(H2(err))) => {
-                let timeout = change_timeout(TIMEOUT_INCR);
+                let timeout = (change_timeout(TIMEOUT_INCR) as f32 * fuzzy) as u64;
                 info!(
                     "Got connection error {:?}. Waiting {:?}ms and retrying",
                     err, TIMEOUT
@@ -60,7 +63,7 @@ fn with_retries(
                 if try_number >= MAX_TRIES {
                     Err(err)
                 } else {
-                    let timeout = change_timeout(TIMEOUT_INCR);
+                    let timeout = (change_timeout(TIMEOUT_INCR) as f32 * fuzzy) as u64;
                     async_std::task::sleep(Duration::from_millis(timeout)).await;
                     with_retries(client, id, try_number + 1).await
                 }
