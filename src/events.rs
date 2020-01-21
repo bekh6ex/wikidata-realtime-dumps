@@ -158,7 +158,7 @@ pub async fn get_update_stream(
 
                 let entity_result = get_entity(client, id).await?;
                 Some(UpdateCommand {
-                    event_id: Some(event_id),
+                    event_id: event_id,
                     entity: entity_result.into_serialized_entity(),
                 })
             }

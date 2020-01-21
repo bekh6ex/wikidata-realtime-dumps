@@ -63,7 +63,7 @@ pub async fn init(
         .filter_map(move |e: Option<GetEntityResult>| {
             let event_id = event_id.clone();
             ready(e.map(move |e| UpdateCommand {
-                event_id: Some(event_id),
+                event_id: event_id,
                 entity: e.into_serialized_entity(),
             }))
         })
