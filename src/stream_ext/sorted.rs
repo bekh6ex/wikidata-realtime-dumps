@@ -68,7 +68,6 @@ where
                     let buffer_len: usize = buffer.values().map(| v| v.len()).sum();
                     if buffer_len > max_buf_size {
                         let item = buffer.get_mut(&seq_marker).unwrap().pop().unwrap();
-                        drop(buffer);
                         self.as_mut().cleanup_buffer();
                         return Poll::Ready(Some(item));
                     } else {
