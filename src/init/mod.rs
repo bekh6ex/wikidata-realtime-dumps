@@ -36,20 +36,7 @@ pub async fn init(
 
     debug!("Creating init stream for {:?}", ty);
 
-    iter(min..=max)
-        .map(move |n| ty.id(n))
-        .map(move |id| {
-            if id.n() == min {
-                info!("Init stream for {:?} started from {:?}", ty, start_id);
-            }
-            if id.n() % 1000 == 0 {
-                info!("Initializing entity {}", id);
-            }
-            if id.n() == max {
-                info!("Initializing the last entity of type {:?}: {}", ty, id);
-            }
-            id
-        })
+    id_stream(min, max, ty)
         .enumerate()
         .then(move |(index, id)| {
             let pool_index = index % client_pool.len();
@@ -68,6 +55,23 @@ pub async fn init(
                 event_id: event_id,
                 entity: e.into_serialized_entity(),
             }))
+        })
+}
+
+fn id_stream(min: u32, max: u32, ty: EntityType) -> impl Stream<Item = EntityId> {
+    iter(min..=max)
+        .map(move |n| ty.id(n))
+        .map(move |id| {
+            if id.n() == min {
+                info!("Init stream for {:?} started from {:?}", ty, min);
+            }
+            if id.n() % 1000 == 0 {
+                info!("Initializing entity {}", id);
+            }
+            if id.n() == max {
+                info!("Initializing the last entity of type {:?}: {}", ty, id);
+            }
+            id
         })
 }
 
