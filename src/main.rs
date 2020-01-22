@@ -23,6 +23,7 @@ mod events;
 mod get_entity;
 mod init;
 mod prelude;
+mod stream_ext;
 mod warp_server;
 
 #[actix_rt::main]
