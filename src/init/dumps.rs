@@ -19,13 +19,18 @@ use serde::{Deserialize, Serialize};
 
 use crate::actor::SerializedEntity;
 use crate::prelude::{EntityId, EntityType, RevisionId};
+use crate::stream_ext::sorted::BufferedSortedStream;
 
 async fn get_dump_stream(ty: EntityType) -> impl Stream<Item=SerializedEntity> {
     let stream = json_stream().await;
     let stream = convert_to_serialized_entity(ty, stream);
+    let stream = sort_stream(stream);
     stream
 }
 
+fn sort_stream(stream: impl Stream<Item=SerializedEntity>) -> impl Stream<Item=SerializedEntity> {
+    BufferedSortedStream::new(stream.fuse(), 100)
+}
 
 fn convert_to_serialized_entity(ty: EntityType, stream: impl Stream<Item=String>) -> impl Stream<Item=SerializedEntity> {
     stream.filter_map(move |s: String| {

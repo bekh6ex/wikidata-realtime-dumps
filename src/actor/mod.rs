@@ -5,6 +5,7 @@ use actix::Message;
 use actix_web::web::Bytes;
 use std::future::Future;
 use std::pin::Pin;
+use crate::stream_ext::Sequential;
 
 pub mod archivarius;
 pub mod volume;
@@ -39,6 +40,14 @@ pub struct SerializedEntity {
     pub id: EntityId,
     pub revision: RevisionId,
     pub data: String,
+}
+
+impl Sequential for SerializedEntity {
+    type Marker = EntityId;
+
+    fn seq_marker(&self) -> Self::Marker {
+        self.id
+    }
 }
 
 impl Message for UpdateChunkCommand {
