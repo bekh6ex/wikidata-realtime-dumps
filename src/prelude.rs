@@ -38,7 +38,7 @@ impl EntityType {
         }
     }
 
-    pub fn parse_from_title(self, title: &str) -> Option<EntityId> {
+    pub fn parse_from_title(self, title: &str) -> Result<EntityId, String> {
         match self.namespace().s {
             None => self.parse_id(title),
             Some(ns) => {
@@ -47,31 +47,28 @@ impl EntityType {
                     let rest: &str = &title[expected_prefix.len()..];
                     self.parse_id(rest)
                 } else {
-                    error!(
+                    Err(format!(
                         "Cannot parse ID type={:?}. Wrong title: title={}",
                         self, title
-                    );
-                    None
+                    ))
                 }
             }
         }
     }
 
-    pub fn parse_id(self, s: &str) -> Option<EntityId> {
+    pub fn parse_id(self, s: &str) -> Result<EntityId, String> {
         if s.is_empty() {
-            error!("Cannot parse empty ID: type={:?}", self);
-            return None;
+            return Err(format!("Cannot parse empty ID: type={:?}", self));
         }
         let prefix = &s[0..1];
         if prefix != self.prefix() {
-            error!("Wrong ID prefix for type: type={:?}, id={}", self, s);
-            None
+            ;
+            Err(format!("Wrong ID prefix for type: type={:?}, id={}", self, s))
         } else {
             let rest = &s[1..];
-            let id: Option<u32> = rest
+            let id = rest
                 .parse()
-                .map_err(|e| error!("Error while parsing ID '{}': {:?}", s, e))
-                .ok();
+                .map_err(|e| format!("Error while parsing ID '{}': {:?}", s, e));
 
             id.map(|n| EntityId { ty: self, id: n })
         }

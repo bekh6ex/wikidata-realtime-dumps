@@ -14,6 +14,8 @@ use crate::events::EventId;
 use std::sync::Arc;
 use std::time::Duration;
 
+mod dumps;
+
 pub async fn init(
     ty: EntityType,
     start_id: Option<EntityId>,
@@ -169,11 +171,12 @@ mod test {
     use async_std::prelude::*;
     use std::collections::BTreeSet;
     use std::sync::atomic::{AtomicU64, Ordering};
+    use hyper::{Body, Client, Request};
 
-//    #[actix_rt::test]
+
+    //    #[actix_rt::test]
     //    #[test]
     async fn test1() {
-        use hyper::{Body, Client, Request};
 
         let client = Client::builder().build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new());
 
