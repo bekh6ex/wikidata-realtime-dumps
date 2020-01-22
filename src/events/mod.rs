@@ -16,6 +16,8 @@ use crate::get_entity::{get_entity, create_client};
 use super::prelude::*;
 use std::cmp::Ordering;
 use crate::events::event_stream::response_to_stream;
+use crate::stream_ext::sorted::BufferedSortedStream;
+use crate::stream_ext::Sequential;
 
 mod event_stream;
 
@@ -151,7 +153,7 @@ async fn get_proper_event_stream(event_id: Option<EventId>) -> impl Stream<Item 
         1000,
     );
 
-    stream.chunks(2).map(|ch: Vec<Event>| {
+    let stream = stream.chunks(2).map(|ch: Vec<Event>| {
         let s = ch.as_slice();
 
         match s {
@@ -164,13 +166,24 @@ async fn get_proper_event_stream(event_id: Option<EventId>) -> impl Stream<Item 
             }
             _ => panic!(),
         }
-    })
+    });
+
+    BufferedSortedStream::new(stream.fuse(), 100)
 }
 
 struct ProperEvent {
     id: EventId,
     data: EventData,
 }
+
+impl Sequential for ProperEvent {
+    type Marker = EventId;
+
+    fn seq_marker(&self) -> Self::Marker {
+        self.id.clone()
+    }
+}
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventId {
@@ -288,13 +301,12 @@ mod test {
     use super::get_top_event_id;
     use std::time::Duration;
 
-//    #[actix_rt::test]
+    #[actix_rt::test]
     async fn always_get_the_same_event_by_same_id() {
         // Does not work. No guarantee that the event data will be the same every time.
         let initial_id = get_top_event_id(None).await;
 
         println!("Starting {}", initial_id.to_string());
-        actix_rt::time::delay_for(Duration::from_secs(10)).await;
         let data1 = get_top_event_data(initial_id.clone()).await;
         let data2 = get_top_event_data(initial_id.clone()).await;
 

@@ -9,34 +9,48 @@ use std::collections::BTreeMap;
 
 pub struct BufferedSortedStream<I, St>
 where
-    I: WithSequentialId,
+    I: Sequential,
 {
-    buffer: BTreeMap<I::Id, I>,
+    buffer: BTreeMap<I::Marker, Vec<I>>,
     stream: St,
     max_buffer_size: usize,
 }
 
 impl<I, St> BufferedSortedStream<I, St>
 where
-    I: WithSequentialId,
+    I: Sequential,
     St: FusedStream<Item = I>,
 {
     unsafe_pinned!(stream: St);
     // TODO: Is it safe? O_o
-    unsafe_unpinned!(buffer: BTreeMap<I::Id, I>);
+    unsafe_unpinned!(buffer: BTreeMap<I::Marker, Vec<I>>);
 
-    fn new(stream: St, max_buffer_size: usize) -> Self {
+    pub fn new(stream: St, max_buffer_size: usize) -> Self {
         BufferedSortedStream {
             stream,
             max_buffer_size,
             buffer: BTreeMap::new(),
         }
     }
+
+    fn cleanup_buffer(mut self: Pin<&mut Self>) {
+        let empty_items: Vec<I::Marker> = self.as_mut().buffer().iter()
+            .filter_map(|(k, v)| if v.is_empty() {
+                Some(k.clone())
+            } else {
+                None
+            }).collect();
+
+        for key in empty_items {
+            self.as_mut().buffer().remove(&key);
+        }
+
+    }
 }
 
 impl<I, St> Stream for BufferedSortedStream<I, St>
 where
-    I: WithSequentialId,
+    I: Sequential,
     St: FusedStream<Item = I>,
 {
     type Item = I;
@@ -48,17 +62,22 @@ where
                 Poll::Ready(Some(item)) => {
                     let max_buf_size = self.max_buffer_size;
                     let buffer = self.as_mut().buffer();
-                    let id = item.id().clone();
-                    buffer.insert(item.id().clone(), item);
-                    if buffer.len() > max_buf_size {
-                        return Poll::Ready(Some(buffer.remove(&id).unwrap()));
+                    let seq_marker = item.seq_marker().clone();
+                    let vec = buffer.entry(seq_marker.clone()).or_insert(vec![]);
+                    vec.push(item);
+                    let buffer_len: usize = buffer.values().map(| v| v.len()).sum();
+                    if buffer_len > max_buf_size {
+                        let item = buffer.get_mut(&seq_marker).unwrap().pop().unwrap();
+                        drop(buffer);
+                        self.as_mut().cleanup_buffer();
+                        return Poll::Ready(Some(item));
                     } else {
                         continue;
                     }
                 }
                 Poll::Ready(None) => {
                     if self.buffer.len() > 0 {
-                        let id = {
+                        let first_id = {
                             let this = self.as_ref();
                             let (id, _) = this.buffer.iter().next().unwrap();
                             id.clone()
@@ -66,7 +85,9 @@ where
 
                         let buffer = self.as_mut().buffer();
 
-                        return Poll::Ready(Some(buffer.remove(&id).unwrap()));
+                        let item = buffer.get_mut(&first_id).unwrap().pop().unwrap();
+                        self.as_mut().cleanup_buffer();
+                        return Poll::Ready(Some(item));
                     } else {
                         return Poll::Ready(None);
                     }
@@ -132,15 +153,24 @@ mod test {
         assert_stream_done!(stream);
     }
 
+    #[test]
+    fn should_not_loose_elements() {
+        let mut stream = new(vec![1, 1], 2);
+
+        assert_stream_next!(stream, 1);
+        assert_stream_next!(stream, 1);
+        assert_stream_done!(stream);
+    }
+
     fn new(stream: Vec<i32>, buffer_size: usize) -> impl Stream<Item = i32> {
         let stream = iter(stream).fuse();
         BufferedSortedStream::new(stream, buffer_size)
     }
 
-    impl WithSequentialId for i32 {
-        type Id = i32;
+    impl Sequential for i32 {
+        type Marker = i32;
 
-        fn id(&self) -> i32 {
+        fn seq_marker(&self) -> i32 {
             self.clone()
         }
     }

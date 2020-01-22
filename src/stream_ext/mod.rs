@@ -1,6 +1,6 @@
-mod sorted;
+pub mod sorted;
 
-pub trait WithSequentialId {
-    type Id: Ord + Clone;
-    fn id(&self) -> Self::Id;
+pub trait Sequential {
+    type Marker: Ord + Clone;
+    fn seq_marker(&self) -> Self::Marker;
 }
