@@ -1,4 +1,3 @@
-use actix_web::dev::Service;
 use async_compression::stream::BzDecoder;
 use async_std::prelude::*;
 use futures::future::ready;

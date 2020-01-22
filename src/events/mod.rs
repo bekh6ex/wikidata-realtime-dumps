@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use futures::future::ready;
 use futures::stream::once;
-use futures::{Stream, StreamExt, TryStreamExt};
+use futures::{Stream, StreamExt};
 use log::*;
 use serde::{Deserialize, Serialize};
 use sse_codec::Event;

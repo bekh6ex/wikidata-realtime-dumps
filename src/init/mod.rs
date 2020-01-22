@@ -4,7 +4,7 @@ use std::time::Duration;
 use actix_web::client::{Client, ClientBuilder, Connector};
 use actix_web::http::StatusCode;
 use actix_web::web::Bytes;
-use futures::future::{ready, Either, FutureExt};
+use futures::future::{ready, FutureExt};
 use futures::stream::{iter, StreamExt};
 use futures::Stream;
 use log::*;
@@ -13,11 +13,10 @@ use warp::Future;
 
 use crate::actor::{SerializedEntity, UpdateCommand};
 use crate::events::EventId;
-use crate::get_entity::{get_entity, GetEntityResult};
+use crate::get_entity::{get_entity};
 use crate::init::dumps::get_dump_stream;
 use crate::prelude::*;
 use crate::stream_ext::join_streams::JoinStreams;
-use crate::stream_ext::sorted::BufferedSortedStream;
 use std::pin::Pin;
 
 mod dumps;

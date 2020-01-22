@@ -1,7 +1,7 @@
 use std::pin::Pin;
 
 use futures::future::Ready;
-use futures::stream::{Fuse, FusedStream, Peekable};
+use futures::stream::{Peekable};
 use futures::task::{Poll, Context};
 use futures::*;
 use log::*;
@@ -37,7 +37,6 @@ where
     unsafe_unpinned!(get_entity: F);
 
     pub fn new(id_stream: IdSt, dump_stream: DSt, get_entity: F) -> Self {
-        use StreamExt;
         JoinStreams {
             id_stream: id_stream.peekable(),
             dump_stream: dump_stream.peekable(),
@@ -56,6 +55,8 @@ where
     type Item = Either<Fut, Ready<Option<SerializedEntity>>>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        #![allow(unused_must_use)]
+
         let new_id: Poll<Option<IdSt::Item>> = self.as_mut().id_stream().poll_peek(cx).map(|opt| opt.map(|i| i.clone()));
 
         match ready!(new_id) {
@@ -91,6 +92,7 @@ where
                         }
                     }
                     None => {
+                        #[allow(unused_must_use)]
                         self.as_mut().id_stream().poll_next(cx);
                         let fut = (self.as_mut().get_entity())(id);
                         debug!("Got from EntityData: {}", id);
