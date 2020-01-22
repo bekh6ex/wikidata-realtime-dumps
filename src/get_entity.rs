@@ -5,6 +5,8 @@ use actix_web::error::PayloadError;
 use actix_web::http::StatusCode;
 use actix_web::web::Bytes;
 use log::*;
+use rand;
+use rand::Rng;
 use serde::Deserialize;
 use serde_json::Value;
 use std::future::Future;
@@ -12,8 +14,6 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use rand;
-use rand::Rng;
 
 pub async fn get_entity(client: Arc<Client>, id: EntityId) -> Option<GetEntityResult> {
     with_retries(client, id, 1)
@@ -37,7 +37,7 @@ fn with_retries(
         debug!("Getting an entity {}. timeout={:?}", id, TIMEOUT);
 
         let r = get_entity_internal(client.clone(), id).await;
-        let fuzzy =  rand::thread_rng().gen_range(0.9f32, 1.1f32);
+        let fuzzy = rand::thread_rng().gen_range(0.9f32, 1.1f32);
 
         use actix_web::client::SendRequestError::*;
         use Error::*;

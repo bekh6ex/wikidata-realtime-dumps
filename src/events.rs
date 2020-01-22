@@ -197,7 +197,6 @@ async fn get_proper_event_stream(event_id: Option<EventId>) -> impl Stream<Item 
         move |id| {
             let id = id.or_else(|| event_id.clone().map(|i| i.to_string()));
 
-
             // Rewind EventId couple seconds back. Event stream has a bit random order of events,
             // so to get all of them we should go back a little.
             let id = id.map(|i| EventId::new(i).rewind(Duration::from_secs(2)).to_string());
@@ -234,7 +233,8 @@ pub struct EventId {
 
 impl EventId {
     fn new(inner: String) -> Self {
-        let parts = serde_json::from_str::<Vec<SerializedEventIdPart>>(&inner).unwrap_or_else(|e| panic!("Unexpected EventId format: '{}. {}'", inner, e));
+        let parts = serde_json::from_str::<Vec<SerializedEventIdPart>>(&inner)
+            .unwrap_or_else(|e| panic!("Unexpected EventId format: '{}. {}'", inner, e));
         EventId { parts }
     }
 
@@ -248,7 +248,15 @@ impl EventId {
     }
 
     fn timestamp_part_pos(&self) -> usize {
-        self.parts.iter().position(|p| p.timestamp.is_some()).unwrap_or_else(|| panic!("EventId serialization does not contain timestamp: '{:?}'", self.parts))
+        self.parts
+            .iter()
+            .position(|p| p.timestamp.is_some())
+            .unwrap_or_else(|| {
+                panic!(
+                    "EventId serialization does not contain timestamp: '{:?}'",
+                    self.parts
+                )
+            })
     }
 
     fn rewind(&self, dur: Duration) -> Self {
@@ -299,9 +307,8 @@ struct SerializedEventIdPart {
     topic: String,
     partition: i8,
     timestamp: Option<u64>,
-    offset: Option<i8>
+    offset: Option<i8>,
 }
-
 
 mod continuous_stream {
     use core::task::{Context, Poll};
