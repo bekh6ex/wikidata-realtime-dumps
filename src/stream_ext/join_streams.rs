@@ -2,25 +2,25 @@ use std::pin::Pin;
 
 use futures::future::Ready;
 use futures::stream::{Fuse, FusedStream, Peekable};
-use futures::task::Poll;
+use futures::task::{Poll, Context};
 use futures::*;
-use futures_test::futures_core_reexport::task::Context;
-use futures_test::futures_core_reexport::Stream;
+use log::*;
+
 use pin_utils::{unsafe_pinned, unsafe_unpinned};
 
 use crate::actor::SerializedEntity;
 use crate::prelude::EntityId;
 use futures::future::Either;
 
-struct JoinStreams<IdSt, DSt: Stream, F> {
-    id_stream: IdSt,
+pub struct JoinStreams<IdSt: Stream, DSt: Stream, F> {
+    id_stream: Peekable<IdSt>, //TODO: test this Peekable. Without it calls get_entity without waiting for the dump
     dump_stream: Peekable<DSt>,
     get_entity: F,
 }
 
 impl<IdSt, DSt, F> Unpin for JoinStreams<IdSt, DSt, F>
 where
-    IdSt: Unpin,
+    IdSt: Stream + Unpin,
     DSt: Stream + Unpin,
 {
 }
@@ -30,16 +30,16 @@ where
     IdSt: Stream<Item = EntityId>,
     DSt: Stream<Item = SerializedEntity>,
     F: FnMut(EntityId) -> Fut,
-    Fut: Future<Output = Option<SerializedEntity>>,
+    Fut: Future<Output = Option<SerializedEntity>> + 'static,
 {
-    unsafe_pinned!(id_stream: IdSt);
+    unsafe_pinned!(id_stream: Peekable<IdSt>);
     unsafe_pinned!(dump_stream: Peekable<DSt>);
     unsafe_unpinned!(get_entity: F);
 
-    fn new(id_stream: IdSt, dump_stream: DSt, get_entity: F) -> Self {
+    pub fn new(id_stream: IdSt, dump_stream: DSt, get_entity: F) -> Self {
         use StreamExt;
         JoinStreams {
-            id_stream,
+            id_stream: id_stream.peekable(),
             dump_stream: dump_stream.peekable(),
             get_entity,
         }
@@ -48,41 +48,52 @@ where
 
 impl<IdSt, DSt, F, Fut> Stream for JoinStreams<IdSt, DSt, F>
 where
-    IdSt: FusedStream<Item = EntityId>,
-    DSt: FusedStream<Item = SerializedEntity>,
+    IdSt: Stream<Item = EntityId>,
+    DSt: Stream<Item = SerializedEntity>,
     F: FnMut(EntityId) -> Fut,
     Fut: Future<Output = Option<SerializedEntity>> + 'static,
 {
     type Item = Either<Fut, Ready<Option<SerializedEntity>>>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let new_id: Poll<Option<IdSt::Item>> = self.as_mut().id_stream().poll_next(cx);
+        let new_id: Poll<Option<IdSt::Item>> = self.as_mut().id_stream().poll_peek(cx).map(|opt| opt.map(|i| i.clone()));
 
         match ready!(new_id) {
             Some(id) => loop {
                 let dump_peek = self.as_mut().dump_stream().poll_peek(cx);
                 match ready!(dump_peek) {
                     Some(dump_entity) => {
+                        debug!("Saw in dump looking for {}: {}", id, dump_entity.id);
                         let dump_entity: &SerializedEntity = dump_entity;
                         if dump_entity.id == id {
+                            self.as_mut().id_stream().poll_next(cx);
                             match self.as_mut().dump_stream().poll_next(cx) {
-                                Poll::Ready(Some(next_from_dump)) => Poll::Ready(Some(
+                                Poll::Ready(Some(next_from_dump)) => {
+                                    debug!("Got from dump: {}", id);
+
                                     return Poll::Ready(Some(
                                         future::ready(Some(next_from_dump)).right_future(),
-                                    )),
-                                )),
+                                    ));
+                                },
                                 _ => unreachable!(),
                             };
                         } else if dump_entity.id > id {
+                            self.as_mut().id_stream().poll_next(cx);
                             let fut = (self.as_mut().get_entity())(id);
+                            debug!("Getting from EntityData: {}", id);
+
                             return Poll::Ready(Some(fut.left_future()));
                         } else {
+                            info!("Dropping from dump: {}", dump_entity.id);
+
                             self.as_mut().dump_stream().poll_next(cx);
                             continue;
                         }
                     }
                     None => {
+                        self.as_mut().id_stream().poll_next(cx);
                         let fut = (self.as_mut().get_entity())(id);
+                        debug!("Got from EntityData: {}", id);
                         return Poll::Ready(Some(fut.left_future()));
                     }
                 }
