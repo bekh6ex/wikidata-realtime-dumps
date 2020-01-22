@@ -33,7 +33,7 @@ fn convert_to_serialized_entity(
 ) -> impl Stream<Item = SerializedEntity> {
     stream.filter_map(move |s: String| {
         let result = serde_json::from_str::<EntityInDump>(&s)
-            .expect("Wrong entity format: {}", s);
+            .expect(&format!("Wrong entity format: {}", s));
 
         ready(match ty.parse_id(&result.id) {
             Err(e) => {
