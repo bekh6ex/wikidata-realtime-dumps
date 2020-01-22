@@ -13,7 +13,7 @@ use log::*;
 
 use crate::actor::archivarius::{ArchivariusActor, InitializationFinished, StartInitialization};
 use crate::actor::UpdateCommand;
-use crate::events::{get_current_event_id, get_update_stream, EventId};
+use crate::events::{get_current_event_id, update_command_stream, EventId};
 use crate::prelude::EntityType;
 use std::iter::FromIterator;
 use std::pin::Pin;
@@ -71,7 +71,7 @@ async fn get_streams(
             let entity_type = entity_type;
             let initial_event_id = initialize(entity_type, archive_actor.clone()).await;
 
-            let update_stream = get_update_stream(entity_type, initial_event_id).await;
+            let update_stream = update_command_stream(entity_type, initial_event_id).await;
 
             let send_forward = move |e: UpdateCommand| {
                 let result = archive_actor.send(e);

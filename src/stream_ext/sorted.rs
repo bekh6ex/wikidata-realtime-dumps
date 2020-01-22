@@ -3,8 +3,7 @@ use std::pin::Pin;
 
 use super::*;
 use futures::task::{Context, Poll};
-use futures::Stream;
-use futures_test::futures_core_reexport::FusedStream;
+use futures::{Stream, stream::FusedStream};
 use pin_utils::{unsafe_pinned, unsafe_unpinned};
 use std::collections::BTreeMap;
 

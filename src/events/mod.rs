@@ -11,10 +11,13 @@ use serde::{Deserialize, Serialize};
 use sse_codec::{decode_stream, Event};
 
 use crate::actor::UpdateCommand;
-use crate::get_entity::get_entity;
+use crate::get_entity::{get_entity, create_client};
 
 use super::prelude::*;
 use std::cmp::Ordering;
+use crate::events::event_stream::response_to_stream;
+
+mod event_stream;
 
 const WIKIDATA: &str = "wikidatawiki";
 
@@ -52,15 +55,8 @@ pub async fn get_current_event_id() -> EventId {
     get_top_event_id(None).await
 }
 
-fn create_client() -> Client {
-    ClientBuilder::new()
-        .timeout(Duration::from_secs(30))
-        .connector(Connector::new().timeout(Duration::from_secs(30)).finish())
-        .finish()
-}
-
-async fn create_raw_stream(event_id: Option<String>) -> impl Stream<Item = Event> {
-    use hyper::{Body, Client, Request};
+async fn open_new_sse_stream(event_id: Option<String>) -> impl Stream<Item = Event> {
+    use hyper::{Body, Client, Request, Response};
 
     let client = Client::builder().build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new());
 
@@ -70,66 +66,16 @@ async fn create_raw_stream(event_id: Option<String>) -> impl Stream<Item = Event
     if event_id.is_some() {
         req = req.header("last-event-id", event_id.clone().unwrap());
     }
+    let req = req.body(Body::empty()).unwrap();
 
     trace!("Sending request: {:?}", req);
 
-    let resp = client
-        .request(req.body(Body::empty()).unwrap())
-        .await
-        .unwrap();
+    let resp = client.request(req).await.unwrap();
 
-    trace!("Got response from stream API: {:?}", resp);
-    let body1 = resp.into_body();
-
-    trace!(
-        "Starting SSE stream from event: {}",
-        event_id.unwrap_or_else(|| "<last>".into())
-    );
-
-    let async_read = body1
-        .into_stream()
-        .map(|c| {
-            trace!("Stream Body Chunk: {:?}", c);
-            c
-        })
-        .map_err(|e| {
-            error!("Stream error: {:?}", e);
-            e
-        })
-        .map_err(|e: hyper::error::Error| Error::new(ErrorKind::Other, format!("{:?}", e)))
-        .into_async_read();
-
-    decode_stream(async_read)
-        .take_while(|decoding_result| {
-            if decoding_result.is_err() {
-                warn!("Error after decoding: {:?}", decoding_result)
-            }
-            ready(decoding_result.is_ok())
-        })
-        .map(|r| r.unwrap())
-        .chunks(2)
-        .take_while(|v| {
-            let s = v.as_slice();
-            match s {
-                [Event::LastEventId { .. }, Event::Message { .. }] => ready(true),
-                _ => {
-                    warn!("Stopping stream. Wrong set of messages: {:?}", v);
-                    ready(false)
-                }
-            }
-        })
-        .map(|v| futures::stream::iter(v))
-        .flatten()
-        .enumerate()
-        .map(|(index, ev)| {
-            if index == 0 {
-                info!("Stream started from {:?}", ev)
-            }
-            ev
-        })
+    response_to_stream(resp, event_id)
 }
 
-pub async fn get_update_stream(
+pub async fn update_command_stream(
     ty: EntityType,
     event_id: EventId,
 ) -> impl Stream<Item = UpdateCommand> {
@@ -174,7 +120,7 @@ pub async fn get_update_stream(
 }
 
 async fn id_stream(from: Option<EventId>) -> impl Stream<Item = EventId> {
-    create_raw_stream(from.map(|id| id.to_string()))
+    open_new_sse_stream(from.map(|id| id.to_string()))
         .await
         .filter_map(|e: Event| {
             let option: Option<EventId> = match e {
@@ -200,7 +146,7 @@ async fn get_proper_event_stream(event_id: Option<EventId>) -> impl Stream<Item 
             // Rewind EventId couple seconds back. Event stream has a bit random order of events,
             // so to get all of them we should go back a little.
             let id = id.map(|i| EventId::new(i).rewind(Duration::from_secs(2)).to_string());
-            once(create_raw_stream(id)).flatten()
+            once(open_new_sse_stream(id)).flatten()
         },
         1000,
     );
@@ -308,125 +254,8 @@ struct SerializedEventIdPart {
     timestamp: Option<u64>,
     offset: Option<i8>,
 }
+mod continuous_stream;
 
-mod continuous_stream {
-    use core::task::{Context, Poll};
-    use std::pin::Pin;
-    use std::time::Duration;
-
-    use actix::prelude::Stream;
-    use actix_rt::time::{delay_for, Delay};
-    use futures::future::{ready, Ready};
-    use futures::stream::once;
-    use futures::StreamExt;
-    use futures_util;
-    use futures_util::stream::*;
-    use log::*;
-    use pin_utils::{unsafe_pinned, unsafe_unpinned};
-    use sse_codec::Event;
-
-    type Sleep<X> = Map<Once<Delay>, fn(()) -> Option<X>>;
-    type Real<X> = Map<Once<Ready<X>>, fn(X) -> Option<X>>;
-    type Chained<X> = Chain<Sleep<X>, Real<X>>;
-    type StreamOfStream<X> =
-        FilterMap<Chained<X>, Ready<Option<X>>, fn(Option<X>) -> Ready<Option<X>>>;
-    type WrapStreamResult<X> = Flatten<StreamOfStream<X>>;
-
-    //    type WrapStreamResultBoxed<X: Stream> = Box<dyn Stream<Item = X::Item> + Sync + Send>;
-
-    pub struct ContinuousStream<St: Stream + 'static, Cr> {
-        stream: WrapStreamResult<St>,
-        creator: Cr,
-        last_event_id: Option<String>,
-        retry_interval_ms: u64,
-    }
-
-    impl<S, Cr> ContinuousStream<S, Cr>
-    where
-        S: Stream<Item = Event>,
-        Cr: FnMut(Option<String>) -> S,
-    {
-        unsafe_pinned!(stream: WrapStreamResult<S>);
-        unsafe_pinned!(last_event_id: Option<String>);
-        unsafe_pinned!(retry_interval_ms: u64);
-        unsafe_unpinned!(creator: Cr);
-
-        pub fn new(mut creator: Cr, retry: u64) -> Self {
-            let last_event_id = None;
-            let new_stream: S = creator(None);
-            let duration = Duration::from_millis(retry);
-
-            let wrapped = Self::wrap_stream(new_stream, duration);
-
-            ContinuousStream {
-                stream: wrapped,
-                creator,
-                last_event_id,
-                retry_interval_ms: 0,
-            }
-        }
-
-        fn wrap_stream<St1: Stream + 'static>(
-            stream: St1,
-            retry: Duration,
-        ) -> WrapStreamResult<St1> {
-            let sleep: Sleep<St1> = once(delay_for(retry)).map(none as fn(()) -> Option<St1>);
-
-            let real = once(ready::<St1>(stream)).map(some as fn(St1) -> Option<St1>);
-
-            let chain = sleep.chain(real);
-
-            let filtered: StreamOfStream<St1> = chain.filter_map(ready::<Option<St1>>);
-
-            filtered.flatten()
-        }
-    }
-
-    impl<S, Cr> Stream for ContinuousStream<S, Cr>
-    where
-        S: Stream<Item = Event>,
-        Cr: FnMut(Option<String>) -> S,
-    {
-        type Item = <S as Stream>::Item;
-
-        fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-            match self.as_mut().stream().poll_next(cx) {
-                Poll::Ready(Some(event)) => {
-                    if let Event::LastEventId { ref id } = event {
-                        // TODO Check what standard says about empty string
-                        self.as_mut().last_event_id().set(Some(id.clone()))
-                    }
-
-                    if let Event::Retry { retry } = event {
-                        self.as_mut().retry_interval_ms().set(retry)
-                    }
-
-                    Poll::Ready(Some(event))
-                }
-                Poll::Pending => Poll::Pending,
-                Poll::Ready(None) => {
-                    info!("Stream failed. Creating new.");
-
-                    let last_event_id = self.as_mut().last_event_id.clone();
-                    let new_stream = self.as_mut().creator()(last_event_id);
-                    let retry = self.as_ref().retry_interval_ms;
-                    let wrapped = Self::wrap_stream(new_stream, Duration::from_millis(retry));
-
-                    self.as_mut().stream().set(wrapped);
-                    self.as_mut().poll_next(cx)
-                }
-            }
-        }
-    }
-
-    fn some<X>(s: X) -> Option<X> {
-        Some(s)
-    }
-
-    fn none<X>(_: ()) -> Option<X> {
-        None
-    }
-}
 
 #[derive(Deserialize, Debug, PartialEq)]
 struct EventData {
@@ -457,11 +286,15 @@ mod test {
     use crate::events::{get_proper_event_stream, EventData, EventId};
 
     use super::get_top_event_id;
+    use std::time::Duration;
 
-    #[actix_rt::test]
-    async fn can_get_top_event_id() {
+//    #[actix_rt::test]
+    async fn always_get_the_same_event_by_same_id() {
+        // Does not work. No guarantee that the event data will be the same every time.
         let initial_id = get_top_event_id(None).await;
 
+        println!("Starting {}", initial_id.to_string());
+        actix_rt::time::delay_for(Duration::from_secs(10)).await;
         let data1 = get_top_event_data(initial_id.clone()).await;
         let data2 = get_top_event_data(initial_id.clone()).await;
 

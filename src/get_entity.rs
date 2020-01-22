@@ -1,6 +1,6 @@
 use crate::actor::SerializedEntity;
 use crate::prelude::*;
-use actix_web::client::{Client, SendRequestError};
+use actix_web::client::{Client, SendRequestError, ClientBuilder, Connector};
 use actix_web::error::PayloadError;
 use actix_web::http::StatusCode;
 use actix_web::web::Bytes;
@@ -14,6 +14,14 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+
+pub fn create_client() -> Client {
+    ClientBuilder::new()
+        .timeout(Duration::from_secs(30))
+        .connector(Connector::new().timeout(Duration::from_secs(30)).finish())
+        .finish()
+}
+
 
 pub async fn get_entity(client: Arc<Client>, id: EntityId) -> Option<GetEntityResult> {
     with_retries(client, id, 1)
