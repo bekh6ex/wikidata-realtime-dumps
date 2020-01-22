@@ -288,7 +288,6 @@ impl PartialEq for EventId {
 }
 impl Eq for EventId {}
 
-
 ///
 /// [
 ///  {

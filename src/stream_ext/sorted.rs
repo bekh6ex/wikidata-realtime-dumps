@@ -1,27 +1,26 @@
 use std::fmt::Debug;
 use std::pin::Pin;
 
+use super::*;
 use futures::task::{Context, Poll};
 use futures::Stream;
-use std::collections::BTreeMap;
-use pin_utils::{unsafe_pinned, unsafe_unpinned};
 use futures_test::futures_core_reexport::FusedStream;
-use super::*;
+use pin_utils::{unsafe_pinned, unsafe_unpinned};
+use std::collections::BTreeMap;
 
 pub struct BufferedSortedStream<I, St>
-    where
-        I: WithSequentialId,
+where
+    I: WithSequentialId,
 {
     buffer: BTreeMap<I::Id, I>,
     stream: St,
     max_buffer_size: usize,
 }
 
-
 impl<I, St> BufferedSortedStream<I, St>
-    where
-        I: WithSequentialId,
-        St: FusedStream<Item = I>,
+where
+    I: WithSequentialId,
+    St: FusedStream<Item = I>,
 {
     unsafe_pinned!(stream: St);
     // TODO: Is it safe? O_o
@@ -31,15 +30,15 @@ impl<I, St> BufferedSortedStream<I, St>
         BufferedSortedStream {
             stream,
             max_buffer_size,
-            buffer: BTreeMap::new()
+            buffer: BTreeMap::new(),
         }
     }
 }
 
 impl<I, St> Stream for BufferedSortedStream<I, St>
-    where
-        I: WithSequentialId,
-        St: FusedStream<Item = I>,
+where
+    I: WithSequentialId,
+    St: FusedStream<Item = I>,
 {
     type Item = I;
 
@@ -53,14 +52,14 @@ impl<I, St> Stream for BufferedSortedStream<I, St>
                     let id = item.id().clone();
                     buffer.insert(item.id().clone(), item);
                     if buffer.len() > max_buf_size {
-                        return Poll::Ready(Some(buffer.remove(&id).unwrap()))
+                        return Poll::Ready(Some(buffer.remove(&id).unwrap()));
                     } else {
                         continue;
                     }
-                },
+                }
                 Poll::Ready(None) => {
                     if self.buffer.len() > 0 {
-                        let id =  {
+                        let id = {
                             let this = self.as_ref();
                             let (id, _) = this.buffer.iter().next().unwrap();
                             id.clone()
@@ -68,26 +67,22 @@ impl<I, St> Stream for BufferedSortedStream<I, St>
 
                         let buffer = self.as_mut().buffer();
 
-                        return Poll::Ready(Some(buffer.remove(&id).unwrap()))
+                        return Poll::Ready(Some(buffer.remove(&id).unwrap()));
                     } else {
-                        return Poll::Ready(None)
+                        return Poll::Ready(None);
                     }
-                },
-                Poll::Pending => {
-                    return Poll::Pending
-                },
+                }
+                Poll::Pending => return Poll::Pending,
             }
         }
-
     }
 }
-
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use futures::*;
     use futures::stream::*;
+    use futures::*;
     use futures_test::*;
 
     #[test]
@@ -121,7 +116,7 @@ mod test {
 
     #[test]
     fn should_sort_two_out_of_order_with_buffer_1() {
-        let mut stream = new(vec![2,1], 1);
+        let mut stream = new(vec![2, 1], 1);
 
         assert_stream_next!(stream, 1);
         assert_stream_next!(stream, 2);
@@ -130,7 +125,7 @@ mod test {
 
     #[test]
     fn should_not_sort_3_out_of_order_with_buffer_1() {
-        let mut stream = new(vec![3,2,1], 1);
+        let mut stream = new(vec![3, 2, 1], 1);
 
         assert_stream_next!(stream, 2);
         assert_stream_next!(stream, 1);

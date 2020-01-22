@@ -1,6 +1,4 @@
-
 mod sorted;
-
 
 pub trait WithSequentialId {
     type Id: Ord + Clone;
