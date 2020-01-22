@@ -60,11 +60,11 @@ async fn json_stream() -> impl Stream<Item = String> {
     let resp = client
         .request(req.body(Body::empty()).unwrap())
         .await
-        .unwrap();
+        .expect("Didn't get the response for dump");
 
     let body = resp.into_body();
 
-    let stream = body.map_err(|_e| std::io::Error::from(std::io::ErrorKind::Other));
+    let stream = body.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e));
 
     let stream = BzDecoder::new(stream);
 
@@ -73,7 +73,9 @@ async fn json_stream() -> impl Stream<Item = String> {
 
     stream
         .skip(1) //First line is always "[\n"
-        .map(Result::unwrap)
+        .map(|r| {
+            r.expect("Dump response stream terminated")
+        })
         .map(|mut s: String| {
             let len = s.len();
             let tail_len = 2; //For trailing ",\n"
