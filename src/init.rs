@@ -150,3 +150,124 @@ struct QueryMap {
 struct ChangeDescription {
     title: String,
 }
+
+#[cfg(test)]
+mod test {
+
+    use futures::StreamExt;
+    use std::io::{Bytes, Error, ErrorKind};
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
+
+    use futures::future::ready;
+    use futures::stream::once;
+    use futures::*;
+    use log::*;
+    use serde::{Deserialize, Serialize};
+
+    use actix_rt;
+    use async_std::prelude::*;
+    use std::collections::BTreeSet;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    #[actix_rt::test]
+    //    #[test]
+    async fn test1() {
+        use hyper::{Body, Client, Request};
+
+        let client = Client::builder().build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new());
+
+        let req = Request::builder()
+            .method("GET")
+            .header("Accept-Encoding", "deflate")
+            .uri("https://dumps.wikimedia.org/other/wikibase/wikidatawiki/latest-all.json.bz2");
+
+        let resp = client
+            .request(req.body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        let body1 = resp.into_body();
+        //
+        let stream = body1.map_err(|e| std::io::Error::from(std::io::ErrorKind::Other));
+        //
+        use async_compression::stream::BzDecoder;
+        let stream = BzDecoder::new(stream);
+
+        //        let stream = stream.map(|x| {
+        //           x.map(|i|i.as_bytes())
+        //        }).into_async_read();
+
+        use futures_codec::{Framed, FramedRead, LinesCodec};
+        let inner = stream.into_async_read();
+        let stream = FramedRead::new(inner, LinesCodec {});
+
+        use serde::Deserialize;
+        #[derive(Deserialize)]
+        struct Entity {
+            id: String,
+        }
+
+        //        let prev_id_inner = &mut "".to_owned();
+        //        let prev_id = AtomicPtr::new(prev_id_inner);
+
+        let pr = AtomicU64::new(0);
+        let diff = AtomicU64::new(0);
+        let idx = AtomicU64::new(1);
+
+        let set = Mutex::new(BTreeSet::new());
+
+        stream
+            .skip(1)
+            .map(Result::unwrap)
+            .map(|s| {
+                let len = s.len();
+
+                let x1 = serde_json::from_str::<Entity>(&s[0..(len - 2)]).unwrap();
+                let id = x1.id[1..].parse::<u64>().unwrap();
+                id
+            })
+            .filter_map(move |id: u64| {
+                let mut set = set.lock().unwrap();
+                set.insert(id);
+
+                let res = if set.len() < 100 {
+                    None
+                } else {
+                    let el: u64 = set.iter().next().unwrap().clone();
+                    set.take(&el)
+                };
+
+                ready(res)
+            })
+            .enumerate()
+            .for_each(|(counter, new)| {
+                if counter % 100_000 == 0 {
+                    println!("Got to index {}. ID = {}", counter, new);
+                }
+
+                let old = pr.load(Ordering::Relaxed);
+
+                if old >= new {
+                    let old_diff = diff.load(Ordering::Relaxed);
+                    let new_diff = old - new;
+                    let max_diff = new_diff.max(old_diff);
+                    diff.store(max_diff, Ordering::Relaxed);
+                    let idx = idx.fetch_add(1, Ordering::Relaxed);
+
+                    println!(
+                        "{} - Old: {}, new: {}, diff = {}, max_diff = {}",
+                        idx, old, new, new_diff, max_diff
+                    );
+                } else {
+                    pr.swap(new, Ordering::Relaxed);
+                }
+                async { () }
+            })
+            .await;
+
+        ()
+
+        //        curl https://dumps.wikimedia.org/other/wikibase/wikidatawiki/latest-all.json.gz | gzip -d | jq -nc --stream 'inputs | select(length==2) | select( .[0][1] == "id") | [ .[1]] ' | less
+    }
+}
