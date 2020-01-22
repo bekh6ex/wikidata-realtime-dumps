@@ -1,15 +1,16 @@
 use std::pin::Pin;
 
+use futures::future::Ready;
 use futures::stream::{Fuse, FusedStream, Peekable};
 use futures::task::Poll;
 use futures::*;
 use futures_test::futures_core_reexport::task::Context;
 use futures_test::futures_core_reexport::Stream;
 use pin_utils::{unsafe_pinned, unsafe_unpinned};
-use warp::Future;
 
 use crate::actor::SerializedEntity;
 use crate::prelude::EntityId;
+use futures::future::Either;
 
 struct JoinStreams<IdSt, DSt: Stream, F> {
     id_stream: IdSt,
@@ -52,7 +53,7 @@ where
     F: FnMut(EntityId) -> Fut,
     Fut: Future<Output = Option<SerializedEntity>> + 'static,
 {
-    type Item = Pin<Box<dyn Future<Output = Option<SerializedEntity>>>>;
+    type Item = Either<Fut, Ready<Option<SerializedEntity>>>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let new_id: Poll<Option<IdSt::Item>> = self.as_mut().id_stream().poll_next(cx);
@@ -66,15 +67,15 @@ where
                         if dump_entity.id == id {
                             match self.as_mut().dump_stream().poll_next(cx) {
                                 Poll::Ready(Some(next_from_dump)) => Poll::Ready(Some(
-                                    return Poll::Ready(Some(Box::pin(future::ready(Some(
-                                        next_from_dump,
-                                    ))))),
+                                    return Poll::Ready(Some(
+                                        future::ready(Some(next_from_dump)).right_future(),
+                                    )),
                                 )),
                                 _ => unreachable!(),
                             };
                         } else if dump_entity.id > id {
                             let fut = (self.as_mut().get_entity())(id);
-                            return Poll::Ready(Some(Box::pin(fut)));
+                            return Poll::Ready(Some(fut.left_future()));
                         } else {
                             self.as_mut().dump_stream().poll_next(cx);
                             continue;
@@ -82,7 +83,7 @@ where
                     }
                     None => {
                         let fut = (self.as_mut().get_entity())(id);
-                        return Poll::Ready(Some(Box::pin(fut)));
+                        return Poll::Ready(Some(fut.left_future()));
                     }
                 }
             },
