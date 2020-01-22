@@ -1,23 +1,21 @@
-use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 use std::time::Duration;
 
-use actix_web::client::{Client, ClientBuilder, Connector};
 use futures::future::ready;
 use futures::stream::once;
 use futures::{Stream, StreamExt, TryStreamExt};
 use log::*;
 use serde::{Deserialize, Serialize};
-use sse_codec::{decode_stream, Event};
+use sse_codec::Event;
 
 use crate::actor::UpdateCommand;
-use crate::get_entity::{get_entity, create_client};
+use crate::get_entity::{create_client, get_entity};
 
 use super::prelude::*;
-use std::cmp::Ordering;
 use crate::events::event_stream::response_to_stream;
 use crate::stream_ext::sorted::BufferedSortedStream;
 use crate::stream_ext::Sequential;
+use std::cmp::Ordering;
 
 mod event_stream;
 
@@ -58,7 +56,7 @@ pub async fn get_current_event_id() -> EventId {
 }
 
 async fn open_new_sse_stream(event_id: Option<String>) -> impl Stream<Item = Event> {
-    use hyper::{Body, Client, Request, Response};
+    use hyper::{Body, Client, Request};
 
     let client = Client::builder().build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new());
 
@@ -181,7 +179,6 @@ impl Sequential for ProperEvent {
     }
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventId {
     parts: Vec<SerializedEventIdPart>,
@@ -266,7 +263,6 @@ struct SerializedEventIdPart {
 }
 mod continuous_stream;
 
-
 #[derive(Deserialize, Debug, PartialEq)]
 struct EventData {
     wiki: String,
@@ -298,7 +294,7 @@ mod test {
     use super::get_top_event_id;
     use std::time::Duration;
 
-//    #[actix_rt::test]
+    //    #[actix_rt::test]
     async fn always_get_the_same_event_by_same_id() {
         // Does not work. No guarantee that the event data will be the same every time.
         let initial_id = get_top_event_id(None).await.rewind(Duration::from_secs(1));

@@ -157,27 +157,23 @@ struct ChangeDescription {
 mod test {
 
     use futures::StreamExt;
-    use std::io::{Bytes, Error, ErrorKind};
-    use std::sync::{Arc, Mutex};
-    use std::time::Duration;
+
+    use std::sync::Mutex;
 
     use futures::future::ready;
-    use futures::stream::once;
-    use futures::*;
-    use log::*;
-    use serde::{Deserialize, Serialize};
 
-    use actix_rt;
+    use futures::*;
+
+    use serde::Deserialize;
+
     use async_std::prelude::*;
+    use hyper::{Body, Client, Request};
     use std::collections::BTreeSet;
     use std::sync::atomic::{AtomicU64, Ordering};
-    use hyper::{Body, Client, Request};
-
 
     //    #[actix_rt::test]
     //    #[test]
     async fn test1() {
-
         let client = Client::builder().build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new());
 
         let req = Request::builder()
@@ -191,17 +187,14 @@ mod test {
             .unwrap();
 
         let body1 = resp.into_body();
-        //
-        let stream = body1.map_err(|e| std::io::Error::from(std::io::ErrorKind::Other));
-        //
+
+        let stream = body1.map_err(|_e| std::io::Error::from(std::io::ErrorKind::Other));
+
         use async_compression::stream::BzDecoder;
         let stream = BzDecoder::new(stream);
 
-        //        let stream = stream.map(|x| {
-        //           x.map(|i|i.as_bytes())
-        //        }).into_async_read();
 
-        use futures_codec::{Framed, FramedRead, LinesCodec};
+        use futures_codec::{FramedRead, LinesCodec};
         let inner = stream.into_async_read();
         let stream = FramedRead::new(inner, LinesCodec {});
 

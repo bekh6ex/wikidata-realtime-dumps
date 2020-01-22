@@ -1,4 +1,3 @@
-use log::*;
 use serde::export::fmt::Error;
 use serde::export::Formatter;
 use serde::{Deserialize, Serialize};
@@ -62,8 +61,10 @@ impl EntityType {
         }
         let prefix = &s[0..1];
         if prefix != self.prefix() {
-            ;
-            Err(format!("Wrong ID prefix for type: type={:?}, id={}", self, s))
+            Err(format!(
+                "Wrong ID prefix for type: type={:?}, id={}",
+                self, s
+            ))
         } else {
             let rest = &s[1..];
             let id = rest

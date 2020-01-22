@@ -16,8 +16,7 @@ use sse_codec::Event;
 type Sleep<X> = Map<Once<Delay>, fn(()) -> Option<X>>;
 type Real<X> = Map<Once<Ready<X>>, fn(X) -> Option<X>>;
 type Chained<X> = Chain<Sleep<X>, Real<X>>;
-type StreamOfStream<X> =
-FilterMap<Chained<X>, Ready<Option<X>>, fn(Option<X>) -> Ready<Option<X>>>;
+type StreamOfStream<X> = FilterMap<Chained<X>, Ready<Option<X>>, fn(Option<X>) -> Ready<Option<X>>>;
 type WrapStreamResult<X> = Flatten<StreamOfStream<X>>;
 
 //    type WrapStreamResultBoxed<X: Stream> = Box<dyn Stream<Item = X::Item> + Sync + Send>;
@@ -30,9 +29,9 @@ pub struct ContinuousStream<St: Stream + 'static, Cr> {
 }
 
 impl<S, Cr> ContinuousStream<S, Cr>
-    where
-        S: Stream<Item = Event>,
-        Cr: FnMut(Option<String>) -> S,
+where
+    S: Stream<Item = Event>,
+    Cr: FnMut(Option<String>) -> S,
 {
     unsafe_pinned!(stream: WrapStreamResult<S>);
     unsafe_pinned!(last_event_id: Option<String>);
@@ -54,10 +53,7 @@ impl<S, Cr> ContinuousStream<S, Cr>
         }
     }
 
-    fn wrap_stream<St1: Stream + 'static>(
-        stream: St1,
-        retry: Duration,
-    ) -> WrapStreamResult<St1> {
+    fn wrap_stream<St1: Stream + 'static>(stream: St1, retry: Duration) -> WrapStreamResult<St1> {
         let sleep: Sleep<St1> = once(delay_for(retry)).map(none as fn(()) -> Option<St1>);
 
         let real = once(ready::<St1>(stream)).map(some as fn(St1) -> Option<St1>);
@@ -71,9 +67,9 @@ impl<S, Cr> ContinuousStream<S, Cr>
 }
 
 impl<S, Cr> Stream for ContinuousStream<S, Cr>
-    where
-        S: Stream<Item = Event>,
-        Cr: FnMut(Option<String>) -> S,
+where
+    S: Stream<Item = Event>,
+    Cr: FnMut(Option<String>) -> S,
 {
     type Item = <S as Stream>::Item;
 

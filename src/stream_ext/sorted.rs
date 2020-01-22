@@ -1,9 +1,8 @@
-use std::fmt::Debug;
 use std::pin::Pin;
 
 use super::*;
 use futures::task::{Context, Poll};
-use futures::{Stream, stream::FusedStream};
+use futures::{stream::FusedStream, Stream};
 use pin_utils::{unsafe_pinned, unsafe_unpinned};
 use std::collections::BTreeMap;
 
@@ -34,17 +33,16 @@ where
     }
 
     fn cleanup_buffer(mut self: Pin<&mut Self>) {
-        let empty_items: Vec<I::Marker> = self.as_mut().buffer().iter()
-            .filter_map(|(k, v)| if v.is_empty() {
-                Some(k.clone())
-            } else {
-                None
-            }).collect();
+        let empty_items: Vec<I::Marker> = self
+            .as_mut()
+            .buffer()
+            .iter()
+            .filter_map(|(k, v)| if v.is_empty() { Some(k.clone()) } else { None })
+            .collect();
 
         for key in empty_items {
             self.as_mut().buffer().remove(&key);
         }
-
     }
 }
 
@@ -65,7 +63,7 @@ where
                     let seq_marker = item.seq_marker().clone();
                     let vec = buffer.entry(seq_marker.clone()).or_insert(vec![]);
                     vec.push(item);
-                    let buffer_len: usize = buffer.values().map(| v| v.len()).sum();
+                    let buffer_len: usize = buffer.values().map(|v| v.len()).sum();
                     if buffer_len > max_buf_size {
                         let item = buffer.get_mut(&seq_marker).unwrap().pop().unwrap();
                         self.as_mut().cleanup_buffer();

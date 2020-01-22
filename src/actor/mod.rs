@@ -1,11 +1,11 @@
 use super::prelude::*;
 use crate::events::EventId;
+use crate::stream_ext::Sequential;
 use actix::prelude::Stream;
 use actix::Message;
 use actix_web::web::Bytes;
 use std::future::Future;
 use std::pin::Pin;
-use crate::stream_ext::Sequential;
 
 pub mod archivarius;
 pub mod volume;

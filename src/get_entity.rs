@@ -1,6 +1,6 @@
 use crate::actor::SerializedEntity;
 use crate::prelude::*;
-use actix_web::client::{Client, SendRequestError, ClientBuilder, Connector};
+use actix_web::client::{Client, ClientBuilder, Connector, SendRequestError};
 use actix_web::error::PayloadError;
 use actix_web::http::StatusCode;
 use actix_web::web::Bytes;
@@ -21,7 +21,6 @@ pub fn create_client() -> Client {
         .connector(Connector::new().timeout(Duration::from_secs(30)).finish())
         .finish()
 }
-
 
 pub async fn get_entity(client: Arc<Client>, id: EntityId) -> Option<GetEntityResult> {
     with_retries(client, id, 1)
