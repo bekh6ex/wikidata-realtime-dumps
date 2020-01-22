@@ -193,7 +193,6 @@ mod test {
         use async_compression::stream::BzDecoder;
         let stream = BzDecoder::new(stream);
 
-
         use futures_codec::{FramedRead, LinesCodec};
         let inner = stream.into_async_read();
         let stream = FramedRead::new(inner, LinesCodec {});

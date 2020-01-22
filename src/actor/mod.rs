@@ -35,7 +35,7 @@ pub struct UpdateChunkCommand {
     pub entity: SerializedEntity,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct SerializedEntity {
     pub id: EntityId,
     pub revision: RevisionId,
