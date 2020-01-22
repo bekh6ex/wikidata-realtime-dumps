@@ -1,8 +1,10 @@
+use std::fmt::Debug;
+
 pub mod sorted;
 
-mod join_streams;
+pub mod join_streams;
 
 pub trait Sequential {
-    type Marker: Ord + Clone;
+    type Marker: Ord + Clone + Debug;
     fn seq_marker(&self) -> Self::Marker;
 }

@@ -1,18 +1,24 @@
-use crate::actor::UpdateCommand;
-use crate::get_entity::{get_entity, GetEntityResult};
-use crate::prelude::*;
+use std::sync::Arc;
+use std::time::Duration;
+
 use actix_web::client::{Client, ClientBuilder, Connector};
 use actix_web::http::StatusCode;
 use actix_web::web::Bytes;
-use futures::future::ready;
+use futures::future::{ready, Either, FutureExt};
 use futures::stream::{iter, StreamExt};
 use futures::Stream;
 use log::*;
 use serde::Deserialize;
+use warp::Future;
 
+use crate::actor::{SerializedEntity, UpdateCommand};
 use crate::events::EventId;
-use std::sync::Arc;
-use std::time::Duration;
+use crate::get_entity::{get_entity, GetEntityResult};
+use crate::init::dumps::get_dump_stream;
+use crate::prelude::*;
+use crate::stream_ext::join_streams::JoinStreams;
+use crate::stream_ext::sorted::BufferedSortedStream;
+use std::pin::Pin;
 
 mod dumps;
 
@@ -27,7 +33,7 @@ pub async fn init(
     let min = start_id.map(|i| i.n()).unwrap_or(1);
     let max = latest_id.n() + safety_offset;
 
-    const MAX_CLIENTS: u32 = 1;
+    const MAX_CLIENTS: u32 = 4;
     let client_pool = Arc::new(
         (0..MAX_CLIENTS)
             .map(|_| create_client())
@@ -36,24 +42,59 @@ pub async fn init(
 
     debug!("Creating init stream for {:?}", ty);
 
-    id_stream(min, max, ty)
-        .enumerate()
-        .then(move |(index, id)| {
-            let pool_index = index % client_pool.len();
+    //    fn get_ser_cons(client_pool: Arc <Vec<Client>>) -> impl FnMut<(EntityId), Output = impl Future<Output = Option<SerializedEntity>>> {
+    //        (|id: EntityId|  {
+    //            let pool_index = id.n() as usize % client_pool.len();
+    //            let client = Arc::new(client_pool[pool_index].clone());
+    //            let timeout = id.n() % 50;
+    //
+    //            async move {
+    //                // To not make a lot of requests in the same time
+    //                async_std::task::sleep(Duration::from_millis(timeout as u64)).await;
+    //                let option = get_entity(client, id).await;
+    //                let result: Option<SerializedEntity> = option.map(|e| e.into_serialized_entity());
+    //                result
+    //            }
+    //        })
+    //    }
+
+    type ThisStream = Pin<Box<dyn Stream<Item = Pin<Box<dyn Future<Output = Option<SerializedEntity>>>>>>>;
+
+    let stream: ThisStream = {
+        let id_stream = id_stream(min, max, ty);
+        let dump_stream = get_dump_stream(ty).await;
+        let client_pool = client_pool.clone();
+
+        let joined = JoinStreams::new(id_stream, dump_stream, move |id: EntityId| {
+            let pool_index = id.n() as usize % client_pool.len();
             let client = Arc::new(client_pool[pool_index].clone());
-            async move {
+            let fut = {
                 // To not make a lot of requests in the same time
-                let timeout = index % 50;
-                async_std::task::sleep(Duration::from_millis(timeout as u64)).await;
-                get_entity(client, id)
-            }
+                let timeout = id.n() % 50;
+                async_std::task::sleep(Duration::from_millis(timeout as u64)).then(move |_| {
+                    get_entity(client, id).map(|option| {
+                        option.map(|e| e.into_serialized_entity())
+
+                    })
+                })
+            };
+            fut
         })
+        .map(pin);
+        fn pin(f: impl Future< Output = Option<SerializedEntity>> + 'static) -> Pin<Box< dyn Future< Output = Option<SerializedEntity>>>> {
+            Box::pin(f)
+        }
+
+        Box::pin(joined)
+    };
+
+    stream
         .buffered(100)
-        .filter_map(move |e: Option<GetEntityResult>| {
+        .filter_map(move |se: Option<SerializedEntity>| {
             let event_id = event_id.clone();
-            ready(e.map(move |e| UpdateCommand {
+            ready(se.map(move |se| UpdateCommand {
                 event_id: event_id,
-                entity: e.into_serialized_entity(),
+                entity: se,
             }))
         })
 }
@@ -63,7 +104,7 @@ fn id_stream(min: u32, max: u32, ty: EntityType) -> impl Stream<Item = EntityId>
         if id.n() == min {
             info!("Init stream for {:?} started from {:?}", ty, min);
         }
-        if id.n() % 1000 == 0 {
+        if id.n() % 100 == 0 {
             info!("Initializing entity {}", id);
         }
         if id.n() == max {
@@ -157,21 +198,16 @@ struct ChangeDescription {
 
 #[cfg(test)]
 mod test {
-
-    use futures::StreamExt;
-
-    use std::sync::Mutex;
-
-    use futures::future::ready;
-
-    use futures::*;
-
-    use serde::Deserialize;
-
-    use async_std::prelude::*;
-    use hyper::{Body, Client, Request};
     use std::collections::BTreeSet;
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Mutex;
+
+    use async_std::prelude::*;
+    use futures::future::ready;
+    use futures::StreamExt;
+    use futures::*;
+    use hyper::{Body, Client, Request};
+    use serde::Deserialize;
 
     //    #[actix_rt::test]
     //    #[test]

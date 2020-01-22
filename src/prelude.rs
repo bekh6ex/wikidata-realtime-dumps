@@ -119,3 +119,15 @@ impl NamespaceId {
         self.n
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::prelude::EntityType;
+
+    #[test]
+    fn entity_id_order() {
+
+        assert!(EntityType::Item.id(1) < EntityType::Item.id(2));
+
+    }
+}
