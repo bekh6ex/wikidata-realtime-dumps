@@ -65,7 +65,13 @@ where
                     vec.push(item);
                     let buffer_len: usize = buffer.values().map(|v| v.len()).sum();
                     if buffer_len > max_buf_size {
-                        let item = buffer.get_mut(&seq_marker).unwrap().pop().unwrap();
+                        let first_id = {
+                            let this = self.as_ref();
+                            let (id, _) = this.buffer.iter().next().unwrap();
+                            id.clone()
+                        };
+                        let buffer = self.as_mut().buffer();
+                        let item = buffer.get_mut(&first_id).unwrap().pop().unwrap();
                         self.as_mut().cleanup_buffer();
                         return Poll::Ready(Some(item));
                     } else {
@@ -147,6 +153,17 @@ mod test {
         assert_stream_next!(stream, 2);
         assert_stream_next!(stream, 1);
         assert_stream_next!(stream, 3);
+        assert_stream_done!(stream);
+    }
+    #[test]
+    fn should_sort_numbers_in_random_order() {
+        let mut stream = new(vec![5,2,3,1,4], 4);
+
+        assert_stream_next!(stream, 1);
+        assert_stream_next!(stream, 2);
+        assert_stream_next!(stream, 3);
+        assert_stream_next!(stream, 4);
+        assert_stream_next!(stream, 5);
         assert_stream_done!(stream);
     }
 
