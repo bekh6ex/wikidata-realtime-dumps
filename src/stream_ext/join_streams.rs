@@ -11,22 +11,20 @@ use warp::Future;
 use crate::actor::SerializedEntity;
 use crate::prelude::EntityId;
 
-struct JoinStreams<IdSt, DSt: Stream, F, Fut> {
+struct JoinStreams<IdSt, DSt: Stream, F> {
     id_stream: IdSt,
     dump_stream: Peekable<DSt>,
     get_entity: F,
-    pending: Option<Fut>,
 }
 
-impl<IdSt, DSt, F, Fut> Unpin for JoinStreams<IdSt, DSt, F, Fut>
+impl<IdSt, DSt, F> Unpin for JoinStreams<IdSt, DSt, F>
 where
     IdSt: Unpin,
     DSt: Stream + Unpin,
-    Fut: Unpin,
 {
 }
 
-impl<IdSt, DSt, F, Fut> JoinStreams<IdSt, DSt, F, Fut>
+impl<IdSt, DSt, F, Fut> JoinStreams<IdSt, DSt, F>
 where
     IdSt: Stream<Item = EntityId>,
     DSt: Stream<Item = SerializedEntity>,
@@ -36,7 +34,6 @@ where
     unsafe_pinned!(id_stream: IdSt);
     unsafe_pinned!(dump_stream: Peekable<DSt>);
     unsafe_unpinned!(get_entity: F);
-    unsafe_pinned!(pending: Option<Fut>);
 
     fn new(id_stream: IdSt, dump_stream: DSt, get_entity: F) -> Self {
         use StreamExt;
@@ -44,62 +41,53 @@ where
             id_stream,
             dump_stream: dump_stream.peekable(),
             get_entity,
-            pending: None,
         }
-    }
-
-    fn schedule_getting_entity(mut self: Pin<&mut Self>, id: EntityId) {
-        let fut = (self.as_mut().get_entity())(id);
-        self.as_mut().pending().set(Some(fut));
     }
 }
 
-impl<IdSt, DSt, F, Fut> Stream for JoinStreams<IdSt, DSt, F, Fut>
+impl<IdSt, DSt, F, Fut> Stream for JoinStreams<IdSt, DSt, F>
 where
     IdSt: FusedStream<Item = EntityId>,
     DSt: FusedStream<Item = SerializedEntity>,
     F: FnMut(EntityId) -> Fut,
-    Fut: Future<Output = Option<SerializedEntity>>,
+    Fut: Future<Output = Option<SerializedEntity>> + 'static,
 {
-    type Item = SerializedEntity;
+    type Item = Pin<Box<dyn Future<Output = Option<SerializedEntity>>>>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        'outer: loop {
-            if self.pending.is_some() {
-                let item = ready!(self.as_mut().pending().as_pin_mut().unwrap().poll(cx));
-                self.as_mut().pending().set(None);
-                if item.is_some() {
-                    return Poll::Ready(item);
-                }
-            } else {
-                let new_id: Poll<Option<IdSt::Item>> = self.as_mut().id_stream().poll_next(cx);
+        let new_id: Poll<Option<IdSt::Item>> = self.as_mut().id_stream().poll_next(cx);
 
-                match ready!(new_id) {
-                    Some(id) => loop {
-                        let dump_peek = self.as_mut().dump_stream().poll_peek(cx);
-                        match ready!(dump_peek) {
-                            Some(dump_entity) => {
-                                let dump_entity: &SerializedEntity = dump_entity;
-                                if dump_entity.id == id {
-                                    return self.as_mut().dump_stream().poll_next(cx);
-                                } else if dump_entity.id > id {
-                                    self.as_mut().schedule_getting_entity(id);
-                                    continue 'outer;
-                                } else {
-                                    self.as_mut().dump_stream().poll_next(cx);
-                                    continue;
-                                }
-                            }
-                            None => {
-                                self.as_mut().schedule_getting_entity(id);
-                                continue 'outer;
-                            }
+        match ready!(new_id) {
+            Some(id) => loop {
+                let dump_peek = self.as_mut().dump_stream().poll_peek(cx);
+                match ready!(dump_peek) {
+                    Some(dump_entity) => {
+                        let dump_entity: &SerializedEntity = dump_entity;
+                        if dump_entity.id == id {
+                            match self.as_mut().dump_stream().poll_next(cx) {
+                                Poll::Ready(Some(next_from_dump)) => Poll::Ready(Some(
+                                    return Poll::Ready(Some(Box::pin(future::ready(Some(
+                                        next_from_dump,
+                                    ))))),
+                                )),
+                                _ => unreachable!(),
+                            };
+                        } else if dump_entity.id > id {
+                            let fut = (self.as_mut().get_entity())(id);
+                            return Poll::Ready(Some(Box::pin(fut)));
+                        } else {
+                            self.as_mut().dump_stream().poll_next(cx);
+                            continue;
                         }
-                    },
+                    }
                     None => {
-                        return Poll::Ready(None);
+                        let fut = (self.as_mut().get_entity())(id);
+                        return Poll::Ready(Some(Box::pin(fut)));
                     }
                 }
+            },
+            None => {
+                return Poll::Ready(None);
             }
         }
     }
@@ -123,6 +111,7 @@ mod test {
         let dump_stream = entities(vec![1]);
 
         let mut streams = JoinStreams::new(id_stream, dump_stream, panic_on_call);
+        let mut streams = streams.filter_map(|f| f);
 
         assert_stream_done!(streams);
         assert_stream_done!(streams);
@@ -134,6 +123,7 @@ mod test {
         let dump_stream = entities(vec![]);
 
         let mut streams = JoinStreams::new(id_stream, dump_stream, always_find);
+        let mut streams = streams.filter_map(|f| f);
 
         assert_stream_next!(streams, dummy_entity(1));
         assert_stream_done!(streams);
@@ -145,6 +135,7 @@ mod test {
         let dump_stream = entities(vec![1]);
 
         let mut streams = JoinStreams::new(id_stream, dump_stream, panic_on_call);
+        let mut streams = streams.filter_map(|f| f);
 
         assert_stream_next!(streams, dummy_entity(1));
         assert_stream_done!(streams);
@@ -159,6 +150,7 @@ mod test {
             assert_eq!(id.n(), 1);
             ready(Some(dummy_entity(1)))
         });
+        let mut streams = streams.filter_map(|f| f);
 
         assert_stream_next!(streams, dummy_entity(1));
         assert_stream_next!(streams, dummy_entity(2));
@@ -171,6 +163,7 @@ mod test {
         let dump_stream = entities(vec![1, 2]);
 
         let mut streams = JoinStreams::new(id_stream, dump_stream, panic_on_call);
+        let mut streams = streams.filter_map(|f| f);
 
         assert_stream_next!(streams, dummy_entity(2));
         assert_stream_done!(streams);
@@ -182,6 +175,7 @@ mod test {
         let dump_stream = entities(vec![2]);
 
         let mut streams = JoinStreams::new(id_stream, dump_stream, never_find);
+        let mut streams = streams.filter_map(|f| f);
 
         assert_stream_next!(streams, dummy_entity(2));
         assert_stream_done!(streams);

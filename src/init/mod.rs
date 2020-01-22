@@ -59,20 +59,18 @@ pub async fn init(
 }
 
 fn id_stream(min: u32, max: u32, ty: EntityType) -> impl Stream<Item = EntityId> {
-    iter(min..=max)
-        .map(move |n| ty.id(n))
-        .map(move |id| {
-            if id.n() == min {
-                info!("Init stream for {:?} started from {:?}", ty, min);
-            }
-            if id.n() % 1000 == 0 {
-                info!("Initializing entity {}", id);
-            }
-            if id.n() == max {
-                info!("Initializing the last entity of type {:?}: {}", ty, id);
-            }
-            id
-        })
+    iter(min..=max).map(move |n| ty.id(n)).map(move |id| {
+        if id.n() == min {
+            info!("Init stream for {:?} started from {:?}", ty, min);
+        }
+        if id.n() % 1000 == 0 {
+            info!("Initializing entity {}", id);
+        }
+        if id.n() == max {
+            info!("Initializing the last entity of type {:?}: {}", ty, id);
+        }
+        id
+    })
 }
 
 async fn get_latest_entity_id(ty: EntityType) -> EntityId {
