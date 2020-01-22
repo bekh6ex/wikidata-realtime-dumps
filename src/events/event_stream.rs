@@ -15,7 +15,7 @@ use crate::get_entity::get_entity;
 use crate::prelude::*;
 use std::cmp::Ordering;
 use hyper::{Body, Client, Request, Response};
-
+use std::fmt::Debug;
 
 
 pub(super) fn response_to_stream(resp: Response<Body>, event_id: Option<String>) -> impl Stream<Item = Event> {
@@ -23,21 +23,15 @@ pub(super) fn response_to_stream(resp: Response<Body>, event_id: Option<String>)
 
     let async_read = body
         .into_stream()
-        .map_err(|e| {
+        .map_err(|e: hyper::error::Error| {
             info!("Stream error: {:?}", e);
-            e
+            Error::new(ErrorKind::Other, format!("{:?}", e))
         })
-        .map_err(|e: hyper::error::Error| Error::new(ErrorKind::Other, format!("{:?}", e)))
         .into_async_read();
+    let decoded_stream = decode_stream(async_read);
+    let event_stream = finish_stream_on_error(decoded_stream);
 
-    let stream = decode_stream(async_read)
-        .take_while(|decoding_result| {
-            if decoding_result.is_err() {
-                info!("Error after decoding: {:?}", decoding_result)
-            }
-            ready(decoding_result.is_ok())
-        })
-        .map(|r| r.unwrap())
+    let stream = event_stream
         .chunks(2)
         .take_while(|v| {
             let s = v.as_slice();
@@ -54,6 +48,19 @@ pub(super) fn response_to_stream(resp: Response<Body>, event_id: Option<String>)
 
     log_start_of_the_stream(stream)
 }
+
+fn finish_stream_on_error<I, E: Debug>(stream: impl Stream<Item = Result<I, E>>) -> impl Stream<Item = I> {
+    stream
+        .take_while(|r: &Result<I, E> | {
+            if let Err(e) = r {
+                warn!("Error after decoding: {:?}", e);
+            }
+
+            ready(r.is_ok())
+        })
+        .map(|r| r.unwrap())
+}
+
 
 fn log_start_of_the_stream(stream: impl Stream<Item = Event>) -> impl Stream<Item = Event> {
     stream

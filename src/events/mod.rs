@@ -98,13 +98,10 @@ pub async fn update_command_stream(
         .filter_map(move |event: ProperEvent| {
             let ProperEvent { id: event_id, data } = event;
             let client = client_for_entities.clone();
-            let ty = ty;
+            let EventData { title, .. } = data;
+            let id = ty.parse_from_title(&title).unwrap();
             async move {
-                let EventData { title, .. } = data;
-                let id = ty.parse_from_title(&title).unwrap();
-
-                let client = client;
-
+                // TODO: Handle new and deleted
                 let entity_result = get_entity(client, id).await?;
                 Some(UpdateCommand {
                     event_id: event_id,
@@ -301,10 +298,10 @@ mod test {
     use super::get_top_event_id;
     use std::time::Duration;
 
-    #[actix_rt::test]
+//    #[actix_rt::test]
     async fn always_get_the_same_event_by_same_id() {
         // Does not work. No guarantee that the event data will be the same every time.
-        let initial_id = get_top_event_id(None).await;
+        let initial_id = get_top_event_id(None).await.rewind(Duration::from_secs(1));
 
         println!("Starting {}", initial_id.to_string());
         let data1 = get_top_event_data(initial_id.clone()).await;
