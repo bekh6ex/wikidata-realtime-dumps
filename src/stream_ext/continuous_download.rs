@@ -3,7 +3,7 @@ use std::pin::Pin;
 use std::time::Duration;
 
 use actix::prelude::Stream;
-use futures::future::{ready, Future, Ready};
+use futures::future::{ready, Ready};
 use futures::stream::once;
 use futures::StreamExt;
 use futures::*;
@@ -12,9 +12,9 @@ use futures_util;
 use futures_util::stream::*;
 use log::*;
 use pin_utils::{unsafe_pinned, unsafe_unpinned};
-use std::convert::Infallible;
+
 use std::fmt::Debug;
-use std::thread::sleep;
+
 
 type Sleep<X> = Map<Once<Delay>, fn(()) -> Option<X>>;
 type Real<X> = Map<Once<Ready<X>>, fn(X) -> Option<X>>;
@@ -120,20 +120,20 @@ fn none<X>(_: ()) -> Option<X> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use futures::stream::*;
-    use futures::*;
-    use futures_test::*;
+    
+    
+    
 
     #[async_std::test]
     async fn should_sort_two_out_of_order_with_buffer_1() {
-        let mut stream = ContinuousDownloadStream::new(
+        let stream = ContinuousDownloadStream::new(
             |offset| {
                 if offset == 0 {
-                    iter(vec![Ok("1"), Err(("err1"))])
+                    iter(vec![Ok("1"), Err("err1")])
                 } else if offset == 1 {
-                    iter(vec![Ok("2"), Err(("err2"))])
+                    iter(vec![Ok("2"), Err("err2")])
                 } else if offset == 2 {
-                    iter(vec![Ok("3"), Err(("err2"))])
+                    iter(vec![Ok("3"), Err("err2")])
                 } else if offset == 3 {
                     iter(vec![Ok("4")])
                 } else {

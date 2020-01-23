@@ -115,7 +115,7 @@ where
 mod test {
     use futures::future::*;
     use futures::stream::*;
-    use futures::*;
+    
     use futures_test::*;
 
     use crate::actor::SerializedEntity;
@@ -128,7 +128,7 @@ mod test {
         let id_stream = ids(vec![]);
         let dump_stream = entities(vec![1]);
 
-        let mut streams = JoinStreams::new(id_stream, dump_stream, panic_on_call);
+        let streams = JoinStreams::new(id_stream, dump_stream, panic_on_call);
         let mut streams = streams.filter_map(|f| f);
 
         assert_stream_done!(streams);
@@ -140,7 +140,7 @@ mod test {
         let id_stream = ids(vec![1]);
         let dump_stream = entities(vec![]);
 
-        let mut streams = JoinStreams::new(id_stream, dump_stream, always_find);
+        let streams = JoinStreams::new(id_stream, dump_stream, always_find);
         let mut streams = streams.filter_map(|f| f);
 
         assert_stream_next!(streams, dummy_entity(1));
@@ -152,7 +152,7 @@ mod test {
         let id_stream = ids(vec![1]);
         let dump_stream = entities(vec![1]);
 
-        let mut streams = JoinStreams::new(id_stream, dump_stream, panic_on_call);
+        let streams = JoinStreams::new(id_stream, dump_stream, panic_on_call);
         let mut streams = streams.filter_map(|f| f);
 
         assert_stream_next!(streams, dummy_entity(1));
@@ -164,7 +164,7 @@ mod test {
         let id_stream = ids(vec![1, 2]);
         let dump_stream = entities(vec![2]);
 
-        let mut streams = JoinStreams::new(id_stream, dump_stream, |id| {
+        let streams = JoinStreams::new(id_stream, dump_stream, |id| {
             assert_eq!(id.n(), 1);
             ready(Some(dummy_entity(1)))
         });
@@ -180,7 +180,7 @@ mod test {
         let id_stream = ids(vec![2]);
         let dump_stream = entities(vec![1, 2]);
 
-        let mut streams = JoinStreams::new(id_stream, dump_stream, panic_on_call);
+        let streams = JoinStreams::new(id_stream, dump_stream, panic_on_call);
         let mut streams = streams.filter_map(|f| f);
 
         assert_stream_next!(streams, dummy_entity(2));
@@ -192,7 +192,7 @@ mod test {
         let id_stream = ids(vec![1, 2]);
         let dump_stream = entities(vec![2]);
 
-        let mut streams = JoinStreams::new(id_stream, dump_stream, never_find);
+        let streams = JoinStreams::new(id_stream, dump_stream, never_find);
         let mut streams = streams.filter_map(|f| f);
 
         assert_stream_next!(streams, dummy_entity(2));
@@ -203,7 +203,7 @@ mod test {
         ready(Some(dummy_entity(id.n())))
     }
 
-    fn never_find(id: EntityId) -> Ready<Option<SerializedEntity>> {
+    fn never_find(_id: EntityId) -> Ready<Option<SerializedEntity>> {
         ready(None)
     }
 

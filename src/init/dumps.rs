@@ -18,7 +18,7 @@ use hyper::body::Bytes;
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper_rustls::HttpsConnector;
-use std::sync::Arc;
+
 
 pub(super) async fn get_dump_stream(ty: EntityType) -> impl Stream<Item = SerializedEntity> {
     let stream = json_stream().await;
@@ -87,7 +87,7 @@ fn download_dump_with_restarts(
 }
 
 async fn json_stream() -> impl Stream<Item = String> {
-    let client = (Client::builder().build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new()));
+    let client = Client::builder().build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new());
 
     let stream = download_dump_with_restarts(client);
 
