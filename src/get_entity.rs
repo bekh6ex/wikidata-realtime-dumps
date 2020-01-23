@@ -28,7 +28,7 @@ pub async fn get_entity(client: Arc<Client>, id: EntityId) -> Option<GetEntityRe
 }
 
 const INITIAL_TIMEOUT: u64 = 50;
-const MAX_TIMEOUT: u64 = 60000;
+const MAX_TIMEOUT: u64 = 5_000;
 static TIMEOUT: AtomicU64 = AtomicU64::new(INITIAL_TIMEOUT);
 const TIMEOUT_INCR: f32 = 1.3;
 const TIMEOUT_REDUCE: f32 = 0.99;
