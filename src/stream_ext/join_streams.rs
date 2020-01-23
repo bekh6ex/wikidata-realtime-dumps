@@ -1,8 +1,8 @@
 use std::pin::Pin;
 
 use futures::future::Ready;
-use futures::stream::{Peekable};
-use futures::task::{Poll, Context};
+use futures::stream::Peekable;
+use futures::task::{Context, Poll};
 use futures::*;
 use log::*;
 
@@ -57,7 +57,11 @@ where
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         #![allow(unused_must_use)]
 
-        let new_id: Poll<Option<IdSt::Item>> = self.as_mut().id_stream().poll_peek(cx).map(|opt| opt.map(|i| i.clone()));
+        let new_id: Poll<Option<IdSt::Item>> = self
+            .as_mut()
+            .id_stream()
+            .poll_peek(cx)
+            .map(|opt| opt.map(|i| i.clone()));
 
         match ready!(new_id) {
             Some(id) => loop {
@@ -75,7 +79,7 @@ where
                                     return Poll::Ready(Some(
                                         future::ready(Some(next_from_dump)).right_future(),
                                     ));
-                                },
+                                }
                                 _ => unreachable!(),
                             };
                         } else if dump_entity.id > id {

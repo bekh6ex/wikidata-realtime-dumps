@@ -157,7 +157,7 @@ mod test {
     }
     #[test]
     fn should_sort_numbers_in_random_order() {
-        let mut stream = new(vec![5,2,3,1,4], 4);
+        let mut stream = new(vec![5, 2, 3, 1, 4], 4);
 
         assert_stream_next!(stream, 1);
         assert_stream_next!(stream, 2);

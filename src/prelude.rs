@@ -126,8 +126,6 @@ mod test {
 
     #[test]
     fn entity_id_order() {
-
         assert!(EntityType::Item.id(1) < EntityType::Item.id(2));
-
     }
 }

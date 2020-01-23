@@ -13,7 +13,7 @@ use warp::Future;
 
 use crate::actor::{SerializedEntity, UpdateCommand};
 use crate::events::EventId;
-use crate::get_entity::{get_entity};
+use crate::get_entity::get_entity;
 use crate::init::dumps::get_dump_stream;
 use crate::prelude::*;
 use crate::stream_ext::join_streams::JoinStreams;
@@ -57,7 +57,8 @@ pub async fn init(
     //        })
     //    }
 
-    type ThisStream = Pin<Box<dyn Stream<Item = Pin<Box<dyn Future<Output = Option<SerializedEntity>>>>>>>;
+    type ThisStream =
+        Pin<Box<dyn Stream<Item = Pin<Box<dyn Future<Output = Option<SerializedEntity>>>>>>>;
 
     let stream: ThisStream = {
         let id_stream = id_stream(min, max, ty);
@@ -71,16 +72,15 @@ pub async fn init(
                 // To not make a lot of requests in the same time
                 let timeout = id.n() % 50;
                 async_std::task::sleep(Duration::from_millis(timeout as u64)).then(move |_| {
-                    get_entity(client, id).map(|option| {
-                        option.map(|e| e.into_serialized_entity())
-
-                    })
+                    get_entity(client, id).map(|option| option.map(|e| e.into_serialized_entity()))
                 })
             };
             fut
         })
         .map(pin);
-        fn pin(f: impl Future< Output = Option<SerializedEntity>> + 'static) -> Pin<Box< dyn Future< Output = Option<SerializedEntity>>>> {
+        fn pin(
+            f: impl Future<Output = Option<SerializedEntity>> + 'static,
+        ) -> Pin<Box<dyn Future<Output = Option<SerializedEntity>>>> {
             Box::pin(f)
         }
 
