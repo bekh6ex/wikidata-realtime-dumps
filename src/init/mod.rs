@@ -32,7 +32,7 @@ pub async fn init(
     let min = start_id.map(|i| i.n()).unwrap_or(1);
     let max = latest_id.n() + safety_offset;
 
-    const MAX_CLIENTS: u32 = 4;
+    const MAX_CLIENTS: u32 = 2;
     let client_pool = Arc::new(
         (0..MAX_CLIENTS)
             .map(|_| create_client())
@@ -88,7 +88,7 @@ pub async fn init(
     };
 
     stream
-        .buffered(100)
+        .buffered(50)
         .filter_map(move |se: Option<SerializedEntity>| {
             let event_id = event_id.clone();
             ready(se.map(move |se| UpdateCommand {
