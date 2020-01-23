@@ -21,6 +21,8 @@ use std::pin::Pin;
 
 mod dumps;
 
+pub use dumps::create_client as create_hyper_client;
+
 pub async fn init(
     ty: EntityType,
     start_id: Option<EntityId>,
@@ -35,7 +37,7 @@ pub async fn init(
     const MAX_CLIENTS: u32 = 2;
     let client_pool = Arc::new(
         (0..MAX_CLIENTS)
-            .map(|_| create_client())
+            .map(|_| create_hyper_client())
             .collect::<Vec<_>>(),
     );
 
@@ -68,14 +70,11 @@ pub async fn init(
         let joined = JoinStreams::new(id_stream, dump_stream, move |id: EntityId| {
             let pool_index = id.n() as usize % client_pool.len();
             let client = Arc::new(client_pool[pool_index].clone());
-            let fut = {
-                // To not make a lot of requests in the same time
-                let timeout = id.n() % 50;
-                async_std::task::sleep(Duration::from_millis(timeout as u64)).then(move |_| {
-                    get_entity(client, id).map(|option| option.map(|e| e.into_serialized_entity()))
-                })
-            };
-            fut
+            // To not make a lot of requests in the same time
+            let timeout = id.n() % 50;
+            async_std::task::sleep(Duration::from_millis(timeout as u64)).then(move |_| {
+                get_entity(client, id).map(|option| option.map(|e| e.into_serialized_entity()))
+            })
         })
         .map(pin);
         fn pin(
@@ -92,7 +91,7 @@ pub async fn init(
         .filter_map(move |se: Option<SerializedEntity>| {
             let event_id = event_id.clone();
             ready(se.map(move |se| UpdateCommand {
-                event_id: event_id,
+                event_id,
                 entity: se,
             }))
         })
@@ -201,15 +200,14 @@ mod test {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Mutex;
 
-    use async_std::prelude::*;
     use futures::future::ready;
     use futures::StreamExt;
     use futures::*;
     use hyper::{Body, Client, Request};
-    use serde::Deserialize;
 
     //    #[actix_rt::test]
     //    #[test]
+    #[allow(dead_code)]
     async fn test1() {
         let client = Client::builder().build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new());
 

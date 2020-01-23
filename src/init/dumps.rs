@@ -2,7 +2,6 @@ use async_compression::stream::BzDecoder;
 use async_std::prelude::*;
 use futures::future::ready;
 use futures::stream::*;
-use futures::*;
 
 use futures::StreamExt;
 use futures_codec::{FramedRead, LinesCodec};
@@ -19,12 +18,10 @@ use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper_rustls::HttpsConnector;
 
-
 pub(super) async fn get_dump_stream(ty: EntityType) -> impl Stream<Item = SerializedEntity> {
     let stream = json_stream().await;
     let stream = convert_to_serialized_entity(ty, stream);
-    let stream = sort_stream(stream);
-    stream
+    sort_stream(stream)
 }
 
 fn sort_stream(
@@ -39,7 +36,7 @@ fn convert_to_serialized_entity(
 ) -> impl Stream<Item = SerializedEntity> {
     stream.filter_map(move |s: String| {
         let result =
-            serde_json::from_str::<EntityInDump>(&s).expect(&format!("Wrong entity format: {}", s));
+            serde_json::from_str::<EntityInDump>(&s).unwrap_or_else(|_| panic!("Wrong entity format: {}", s));
 
         ready(match ty.parse_id(&result.id) {
             Err(e) => {
@@ -72,8 +69,7 @@ async fn do_request(
 
     let body = resp.into_body();
 
-    let stream = body.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e));
-    stream
+    body.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
 }
 
 fn download_dump_with_restarts(
@@ -87,7 +83,8 @@ fn download_dump_with_restarts(
 }
 
 async fn json_stream() -> impl Stream<Item = String> {
-    let client = Client::builder().build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new());
+    let client1 = create_client();
+    let client = client1;
 
     let stream = download_dump_with_restarts(client);
 
@@ -105,6 +102,10 @@ async fn json_stream() -> impl Stream<Item = String> {
             s.truncate(len - tail_len);
             s
         })
+}
+
+pub fn create_client() -> Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> {
+    Client::builder().build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new())
 }
 
 #[derive(Deserialize)]

@@ -38,7 +38,7 @@ pub(super) fn response_to_stream(
                 }
             }
         })
-        .map(|v| futures::stream::iter(v))
+        .map(futures::stream::iter)
         .flatten();
 
     log_start_of_the_stream(stream)

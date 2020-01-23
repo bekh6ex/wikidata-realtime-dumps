@@ -102,7 +102,7 @@ pub async fn update_command_stream(
                 // TODO: Handle new and deleted
                 let entity_result = get_entity(client, id).await?;
                 Some(UpdateCommand {
-                    event_id: event_id,
+                    event_id,
                     entity: entity_result.into_serialized_entity(),
                 })
             }
@@ -117,7 +117,7 @@ pub async fn update_command_stream(
 }
 
 async fn id_stream(from: Option<EventId>) -> impl Stream<Item = EventId> {
-    open_new_sse_stream(from.map(|id| id.to_string()))
+    open_new_sse_stream(from.map(|id| id.to_json_string()))
         .await
         .filter_map(|e: Event| {
             let option: Option<EventId> = match e {
@@ -138,11 +138,11 @@ async fn get_top_event_id(from: Option<EventId>) -> EventId {
 async fn get_proper_event_stream(event_id: Option<EventId>) -> impl Stream<Item = ProperEvent> {
     let stream = continuous_stream::ContinuousStream::new(
         move |id| {
-            let id = id.or_else(|| event_id.clone().map(|i| i.to_string()));
+            let id = id.or_else(|| event_id.clone().map(|i| i.to_json_string()));
 
             // Rewind EventId couple seconds back. Event stream has a bit random order of events,
             // so to get all of them we should go back a little.
-            let id = id.map(|i| EventId::new(i).rewind(Duration::from_secs(2)).to_string());
+            let id = id.map(|i| EventId::new(i).rewind(Duration::from_secs(2)).to_json_string());
             once(open_new_sse_stream(id)).flatten()
         },
         1000,
@@ -191,7 +191,7 @@ impl EventId {
         EventId { parts }
     }
 
-    fn to_string(&self) -> String {
+    fn to_json_string(&self) -> String {
         serde_json::to_string(&self.parts).unwrap()
     }
 
@@ -295,11 +295,12 @@ mod test {
     use std::time::Duration;
 
     //    #[actix_rt::test]
+    #[allow(dead_code)]
     async fn always_get_the_same_event_by_same_id() {
         // Does not work. No guarantee that the event data will be the same every time.
         let initial_id = get_top_event_id(None).await.rewind(Duration::from_secs(1));
 
-        println!("Starting {}", initial_id.to_string());
+        println!("Starting {}", initial_id.to_json_string());
         let data1 = get_top_event_data(initial_id.clone()).await;
         let data2 = get_top_event_data(initial_id.clone()).await;
 

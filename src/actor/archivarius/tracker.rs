@@ -20,21 +20,27 @@ where
 
     fn mark_pending(&mut self, id: Id) {
         if let Some(max) = &self.max_persisted {
-            if &id < max {
+            if id < *max {
                 self.max_persisted = Some(id.previous());
             }
         }
         self.pending.push(id);
     }
     fn mark_persisted(&mut self, id: Id) {
-        let index = self.pending.iter().position(|i| *i == id).expect(&format!(
-            "Got persisted item `{:?}`, that was never pending. It's a bug",
-            &id
-        ));
+        let index = self
+            .pending
+            .iter()
+            .position(|i| *i == id)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Got persisted item `{:?}`, that was never pending. It's a bug",
+                    id
+                )
+            });
         let item = self.pending.remove(index);
         match &self.max_persisted {
             None => self.max_persisted = Some(item),
-            Some(max_persisted) if max_persisted < &item => self.max_persisted = Some(item),
+            Some(max_persisted) if *max_persisted < item => self.max_persisted = Some(item),
             _ => {}
         }
     }

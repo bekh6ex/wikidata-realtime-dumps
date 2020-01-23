@@ -61,7 +61,7 @@ where
                     let max_buf_size = self.max_buffer_size;
                     let buffer = self.as_mut().buffer();
                     let seq_marker = item.seq_marker().clone();
-                    let vec = buffer.entry(seq_marker.clone()).or_insert(vec![]);
+                    let vec = buffer.entry(seq_marker.clone()).or_insert_with(|| vec![]);
                     vec.push(item);
                     let buffer_len: usize = buffer.values().map(|v| v.len()).sum();
                     if buffer_len > max_buf_size {
@@ -79,7 +79,7 @@ where
                     }
                 }
                 Poll::Ready(None) => {
-                    if self.buffer.len() > 0 {
+                    if !self.buffer.is_empty() {
                         let first_id = {
                             let this = self.as_ref();
                             let (id, _) = this.buffer.iter().next().unwrap();
@@ -105,7 +105,6 @@ where
 mod test {
     use super::*;
     use futures::stream::*;
-    use futures::*;
     use futures_test::*;
 
     #[test]

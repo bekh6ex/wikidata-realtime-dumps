@@ -11,6 +11,7 @@ use pin_utils::{unsafe_pinned, unsafe_unpinned};
 use crate::actor::SerializedEntity;
 use crate::prelude::EntityId;
 use futures::future::Either;
+use std::cmp::Ordering;
 
 pub struct JoinStreams<IdSt: Stream, DSt: Stream, F> {
     id_stream: Peekable<IdSt>, //TODO: test this Peekable. Without it calls get_entity without waiting for the dump
@@ -61,7 +62,7 @@ where
             .as_mut()
             .id_stream()
             .poll_peek(cx)
-            .map(|opt| opt.map(|i| i.clone()));
+            .map(|opt| opt.copied());
 
         match ready!(new_id) {
             Some(id) => loop {
@@ -70,29 +71,33 @@ where
                     Some(dump_entity) => {
                         debug!("Saw in dump looking for {}: {}", id, dump_entity.id);
                         let dump_entity: &SerializedEntity = dump_entity;
-                        if dump_entity.id == id {
-                            self.as_mut().id_stream().poll_next(cx);
-                            match self.as_mut().dump_stream().poll_next(cx) {
-                                Poll::Ready(Some(next_from_dump)) => {
-                                    debug!("Got from dump: {}", id);
+                        match dump_entity.id.cmp(&id) {
+                            Ordering::Equal => {
+                                self.as_mut().id_stream().poll_next(cx);
+                                match self.as_mut().dump_stream().poll_next(cx) {
+                                    Poll::Ready(Some(next_from_dump)) => {
+                                        debug!("Got from dump: {}", id);
 
-                                    return Poll::Ready(Some(
-                                        future::ready(Some(next_from_dump)).right_future(),
-                                    ));
-                                }
-                                _ => unreachable!(),
-                            };
-                        } else if dump_entity.id > id {
-                            self.as_mut().id_stream().poll_next(cx);
-                            let fut = (self.as_mut().get_entity())(id);
-                            debug!("Getting from EntityData: {}", id);
+                                        return Poll::Ready(Some(
+                                            future::ready(Some(next_from_dump)).right_future(),
+                                        ));
+                                    }
+                                    _ => unreachable!(),
+                                };
+                            }
+                            Ordering::Greater => {
+                                self.as_mut().id_stream().poll_next(cx);
+                                let fut = (self.as_mut().get_entity())(id);
+                                debug!("Getting from EntityData: {}", id);
 
-                            return Poll::Ready(Some(fut.left_future()));
-                        } else {
-                            info!("Dropping from dump: {}", dump_entity.id);
+                                return Poll::Ready(Some(fut.left_future()));
+                            }
+                            Ordering::Less => {
+                                info!("Dropping from dump: {}", dump_entity.id);
 
-                            self.as_mut().dump_stream().poll_next(cx);
-                            continue;
+                                self.as_mut().dump_stream().poll_next(cx);
+                                continue;
+                            }
                         }
                     }
                     None => {
@@ -104,9 +109,7 @@ where
                     }
                 }
             },
-            None => {
-                return Poll::Ready(None);
-            }
+            None => Poll::Ready(None),
         }
     }
 }
@@ -115,7 +118,7 @@ where
 mod test {
     use futures::future::*;
     use futures::stream::*;
-    
+
     use futures_test::*;
 
     use crate::actor::SerializedEntity;

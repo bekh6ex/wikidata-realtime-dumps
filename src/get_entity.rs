@@ -1,9 +1,6 @@
 use crate::actor::SerializedEntity;
 use crate::prelude::*;
-use actix_web::client::{Client, ClientBuilder, Connector, SendRequestError};
-use actix_web::error::PayloadError;
-use actix_web::http::StatusCode;
-use actix_web::web::Bytes;
+
 use log::*;
 use rand;
 use rand::Rng;
@@ -15,12 +12,17 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-pub fn create_client() -> Client {
-    ClientBuilder::new()
-        .timeout(Duration::from_secs(30))
-        .connector(Connector::new().timeout(Duration::from_secs(30)).finish())
-        .finish()
-}
+use futures::*;
+use hyper::client::connect::dns::GaiResolver;
+use hyper::client::HttpConnector;
+use hyper::{Response, StatusCode};
+use hyper_rustls::HttpsConnector;
+
+use hyper::{Body, Client as HyperClient, Request};
+
+pub use crate::init::create_hyper_client as create_client;
+
+type Client = HyperClient<HttpsConnector<HttpConnector<GaiResolver>>, Body>;
 
 pub async fn get_entity(client: Arc<Client>, id: EntityId) -> Option<GetEntityResult> {
     with_retries(client, id, 1)
@@ -46,19 +48,15 @@ fn with_retries(
         let r = get_entity_internal(client.clone(), id).await;
         let fuzzy = rand::thread_rng().gen_range(0.9f32, 1.1f32);
 
-        use actix_web::client::SendRequestError::*;
         use Error::*;
         match r {
             Ok(result) => {
                 change_timeout(TIMEOUT_REDUCE);
                 Ok(result)
             }
-            Err(GetResponse(H2(err))) => {
+            Err(TooManyRequests) => {
                 let timeout = (change_timeout(TIMEOUT_INCR) as f32 * fuzzy) as u64;
-                info!(
-                    "Got connection error {:?}. Waiting {:?}ms and retrying",
-                    err, TIMEOUT
-                );
+                info!("Too many requests. Waiting {:?}ms and retrying", timeout);
                 async_std::task::sleep(Duration::from_millis(timeout)).await;
                 with_retries(client, id, try_number).await
             }
@@ -100,13 +98,18 @@ async fn get_entity_internal(
     client: Arc<Client>,
     id: EntityId,
 ) -> Result<Option<GetEntityResult>, Error> {
-    let req = client.get(format!(
-        "https://www.wikidata.org/wiki/Special:EntityData/{}.json",
-        id
-    ));
+    let req = Request::builder()
+        .method("GET")
+        .header("Accept-Encoding", "deflate")
+        .uri(format!(
+            "https://www.wikidata.org/wiki/Special:EntityData/{}.json",
+            id
+        ))
+        .body(Body::empty())
+        .unwrap();
 
     debug!("Sending get entity request. id={}", id);
-    let mut response = req.send().await.map_err(Error::GetResponse)?;
+    let response: Response<Body> = client.request(req).await.map_err(Error::GetResponse)?;
 
     debug!(
         "Got entity response. status={} id={}",
@@ -121,18 +124,25 @@ async fn get_entity_internal(
         return Err(Error::TooManyRequests);
     }
 
-    let body: Bytes = response
-        .body()
-        .limit(8 * 1024 * 1024)
-        .await
-        .map_err(Error::GetResponseBody)?;
+    use bytes::buf::BufExt;
+    use bytes::Buf;
 
-    let response = serde_json::from_slice::<WikidataResponse>(body.as_ref()).map_err(|e| {
-        Error::ResponseFormat {
-            cause: e,
-            body: std::str::from_utf8(body.as_ref()).unwrap().to_owned(),
-        }
-    })?;
+    let body = hyper::body::aggregate(response)
+        .map_err(Error::GetResponse)
+        .await?
+        .to_bytes();
+
+    let body_for_error = body.clone();
+
+    let response =
+        serde_json::from_reader::<_, WikidataResponse>(body.reader()).map_err(move |e| {
+            Error::ResponseFormat {
+                cause: e,
+                body: std::str::from_utf8(body_for_error.bytes())
+                    .unwrap()
+                    .to_owned(),
+            }
+        })?;
 
     // Entity might be a redirect to another one which will be automatically resolved.
     // The response will then contains some other entity which should be ignored.
@@ -154,8 +164,7 @@ async fn get_entity_internal(
 #[derive(Debug)]
 pub enum Error {
     TooManyRequests,
-    GetResponse(SendRequestError),
-    GetResponseBody(PayloadError),
+    GetResponse(hyper::Error),
     ResponseFormat {
         cause: serde_json::Error,
         body: String,

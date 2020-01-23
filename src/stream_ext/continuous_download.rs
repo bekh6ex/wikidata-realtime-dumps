@@ -15,7 +15,6 @@ use pin_utils::{unsafe_pinned, unsafe_unpinned};
 
 use std::fmt::Debug;
 
-
 type Sleep<X> = Map<Once<Delay>, fn(()) -> Option<X>>;
 type Real<X> = Map<Once<Ready<X>>, fn(X) -> Option<X>>;
 type Chained<X> = Chain<Sleep<X>, Real<X>>;
@@ -120,9 +119,6 @@ fn none<X>(_: ()) -> Option<X> {
 #[cfg(test)]
 mod test {
     use super::*;
-    
-    
-    
 
     #[async_std::test]
     async fn should_sort_two_out_of_order_with_buffer_1() {
