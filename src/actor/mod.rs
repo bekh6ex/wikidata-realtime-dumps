@@ -3,7 +3,7 @@ use crate::events::EventId;
 use crate::stream_ext::Sequential;
 use actix::prelude::Stream;
 use actix::Message;
-use actix_web::web::Bytes;
+use bytes::Bytes;
 use std::future::Future;
 use std::pin::Pin;
 

@@ -1,7 +1,7 @@
 use super::SerializedEntity;
 use crate::actor::UpdateChunkCommand;
 use actix::{Actor, Context, Handler, Message, MessageResult};
-use actix_web::web::Bytes;
+use bytes::Bytes;
 
 use log::*;
 

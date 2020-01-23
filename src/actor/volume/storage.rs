@@ -1,6 +1,6 @@
 use crate::actor::SerializedEntity;
 use crate::prelude::{EntityId, EntityType, RevisionId};
-use actix_web::web::Bytes;
+use bytes::Bytes;
 use log::*;
 use serde::export::fmt::{Debug, Error};
 use serde::export::Formatter;

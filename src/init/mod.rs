@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use actix_web::client::{Client, ClientBuilder, Connector};
 use actix_web::http::StatusCode;
-use actix_web::web::Bytes;
+use bytes::Bytes;
 use futures::future::{ready, FutureExt};
 use futures::stream::{iter, StreamExt};
 use futures::Stream;
