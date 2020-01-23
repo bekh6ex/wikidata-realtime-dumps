@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 use sse_codec::Event;
 
 use crate::actor::UpdateCommand;
-use crate::get_entity::{create_client, get_entity};
+use crate::get_entity::get_entity;
+use crate::http_client::create_client;
 
 use super::prelude::*;
 use crate::events::event_stream::response_to_stream;

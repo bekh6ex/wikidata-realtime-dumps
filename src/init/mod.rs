@@ -18,10 +18,10 @@ use crate::init::dumps::get_dump_stream;
 use crate::prelude::*;
 use crate::stream_ext::join_streams::JoinStreams;
 use std::pin::Pin;
+use crate::http_client::create_client;
 
 mod dumps;
 
-pub use dumps::create_client as create_hyper_client;
 
 pub async fn init(
     ty: EntityType,
@@ -37,7 +37,7 @@ pub async fn init(
     const MAX_CLIENTS: u32 = 2;
     let client_pool = Arc::new(
         (0..MAX_CLIENTS)
-            .map(|_| create_hyper_client())
+            .map(|_| create_client())
             .collect::<Vec<_>>(),
     );
 
@@ -113,7 +113,7 @@ fn id_stream(min: u32, max: u32, ty: EntityType) -> impl Stream<Item = EntityId>
 }
 
 async fn get_latest_entity_id(ty: EntityType) -> EntityId {
-    let client = create_client();
+    let client = create_actix_client();
 
     let url = format!("https://www.wikidata.org/w/api.php?action=query&format=json&list=recentchanges&rcnamespace={}&rctype=new&rclimit=1", ty.namespace().n());
 
@@ -166,7 +166,7 @@ async fn get_latest_entity_id(ty: EntityType) -> EntityId {
     id
 }
 
-fn create_client() -> Client {
+fn create_actix_client() -> Client {
     ClientBuilder::new()
         .timeout(Duration::from_secs(30))
         .disable_redirects()

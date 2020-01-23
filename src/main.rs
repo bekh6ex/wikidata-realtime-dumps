@@ -25,6 +25,7 @@ mod init;
 mod prelude;
 mod stream_ext;
 mod warp_server;
+mod http_client;
 
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {

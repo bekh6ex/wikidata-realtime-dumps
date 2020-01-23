@@ -13,6 +13,7 @@ use crate::actor::SerializedEntity;
 use crate::prelude::{EntityType, RevisionId};
 use crate::stream_ext::continuous_download::ContinuousDownloadStream;
 use crate::stream_ext::sorted::BufferedSortedStream;
+use crate::http_client::create_client;
 use hyper::body::Bytes;
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
@@ -102,10 +103,6 @@ async fn json_stream() -> impl Stream<Item = String> {
             s.truncate(len - tail_len);
             s
         })
-}
-
-pub fn create_client() -> Client<HttpsConnector<HttpConnector<GaiResolver>>, Body> {
-    Client::builder().build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new())
 }
 
 #[derive(Deserialize)]

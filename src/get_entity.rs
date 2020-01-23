@@ -20,7 +20,6 @@ use hyper_rustls::HttpsConnector;
 
 use hyper::{Body, Client as HyperClient, Request};
 
-pub use crate::init::create_hyper_client as create_client;
 
 type Client = HyperClient<HttpsConnector<HttpConnector<GaiResolver>>, Body>;
 
