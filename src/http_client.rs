@@ -11,7 +11,7 @@ use hyper_rustls::HttpsConnector;
 use log::*;
 
 
-use serde::de::DeserializeOwned;
+use serde::de::Deserialize;
 
 type Client = HyperClient<HttpsConnector<HttpConnector<GaiResolver>>, Body>;
 
@@ -19,7 +19,7 @@ pub fn create_client() -> Client {
     HyperClient::builder().build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new())
 }
 
-pub async fn get_json<T: DeserializeOwned>(
+pub async fn get_json<'a, T: Deserialize<'a>>(
     client: &Client,
     url: String,
 ) -> Result<Option<T>, Error> {
@@ -51,14 +51,13 @@ pub async fn get_json<T: DeserializeOwned>(
         .to_bytes();
 
     let body_for_error = body.clone();
-
-    let result =
-        serde_json::from_reader::<_, T>(body.reader()).map_err(move |e| Error::ResponseFormat {
-            cause: e,
-            body: std::str::from_utf8(body_for_error.bytes())
-                .unwrap()
-                .to_owned(),
-        })?;
+    let mut de = serde_json::Deserializer::from_reader(body.reader());
+    let result: T = T::deserialize(&mut de).map_err(move |e| Error::ResponseFormat {
+        cause: e,
+        body: std::str::from_utf8(body_for_error.bytes())
+            .unwrap()
+            .to_owned(),
+    })?;
 
     Ok(Some(result))
 }

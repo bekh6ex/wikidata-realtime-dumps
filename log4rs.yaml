@@ -10,8 +10,4 @@ root:
 loggers:
   wikidata_realtime_dumps:
     level: info
-  actix_server:
-    level: info
-  actix_web:
-    level: info
 
