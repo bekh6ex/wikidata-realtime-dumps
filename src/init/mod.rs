@@ -1,9 +1,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use actix_web::client::{Client, ClientBuilder, Connector};
-use actix_web::http::StatusCode;
-use bytes::Bytes;
 use futures::future::{ready, FutureExt};
 use futures::stream::{iter, StreamExt};
 use futures::Stream;
@@ -14,7 +11,7 @@ use warp::Future;
 use crate::actor::{SerializedEntity, UpdateCommand};
 use crate::events::EventId;
 use crate::get_entity::get_entity;
-use crate::http_client::create_client;
+use crate::http_client::{create_client, get_json};
 use crate::init::dumps::get_dump_stream;
 use crate::prelude::*;
 use crate::stream_ext::join_streams::JoinStreams;
@@ -112,70 +109,18 @@ fn id_stream(min: u32, max: u32, ty: EntityType) -> impl Stream<Item = EntityId>
 }
 
 async fn get_latest_entity_id(ty: EntityType) -> EntityId {
-    let client = create_actix_client();
+    let client = create_client();
 
     let url = format!("https://www.wikidata.org/w/api.php?action=query&format=json&list=recentchanges&rcnamespace={}&rctype=new&rclimit=1", ty.namespace().n());
 
-    let mut response = client
-        .get(url)
-        .header("User-Agent", "Actix-web")
-        .timeout(Duration::from_secs(600))
-        .send()
+    let unser = get_json::<QueryResponse>(&client, url)
         .await
-        .map_err(|e| panic!("Failed to get RC response: type={:?}, error={:?}", ty, e))
-        .unwrap();
+        .expect("Request failed")
+        .expect("Unexpected API response");
 
-    if response.status() != StatusCode::OK {
-        panic!(
-            "Got unexpected status code: type={:?}, status_code={:?}",
-            ty,
-            response.status()
-        )
-    }
-
-    let body: Bytes = response
-        .body()
-        .await
-        .map_err(|e| {
-            panic!(
-                "Failed to get body of RC response: type={:?}, error={:?}",
-                ty, e
-            )
-        })
-        .unwrap();
-
-    let unser: QueryResponse = serde_json::from_slice::<QueryResponse>(body.as_ref())
-        .unwrap_or_else(|_| {
-            panic!(
-                "Invalid response format: {:?}\n{:?}",
-                &ty,
-                std::str::from_utf8(body.as_ref())
-            )
-        });
-
-    let title = &unser
-        .query
-        .recentchanges
-        .get(0)
-        .expect("No changes present")
-        .title;
-
-    let id = ty.parse_from_title(title).expect("Failed to parse ID");
+    let id = unser.extract_last_id(ty);
     info!("Got latest ID '{}'", id);
     id
-}
-
-fn create_actix_client() -> Client {
-    ClientBuilder::new()
-        .timeout(Duration::from_secs(30))
-        .disable_redirects()
-        .connector(
-            Connector::new()
-                .timeout(Duration::from_secs(30))
-                .conn_lifetime(Duration::from_secs(5 * 60))
-                .finish(),
-        )
-        .finish()
 }
 
 #[derive(Deserialize)]
@@ -191,6 +136,20 @@ struct QueryMap {
 #[derive(Deserialize)]
 struct ChangeDescription {
     title: String,
+}
+
+impl QueryResponse {
+    fn extract_last_id(self, ty: EntityType) -> EntityId {
+        let title = &self
+            .query
+            .recentchanges
+            .get(0)
+            .expect("No changes present")
+            .title;
+
+        let id = ty.parse_from_title(title).expect("Failed to parse ID");
+        id
+    }
 }
 
 #[cfg(test)]
