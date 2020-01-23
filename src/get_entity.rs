@@ -117,7 +117,8 @@ async fn get_entity_internal(
     if response.status() == StatusCode::NOT_FOUND {
         return Ok(None);
     } else if response.status() == StatusCode::TOO_MANY_REQUESTS {
-        return Err(Error::TooManyRequests(format!("{:?}", response)));
+        // TODO: Maybe handle 'retry-after' header in response
+        return Err(Error::TooManyRequests);
     }
 
     let body: Bytes = response
@@ -152,7 +153,7 @@ async fn get_entity_internal(
 
 #[derive(Debug)]
 pub enum Error {
-    TooManyRequests(String),
+    TooManyRequests,
     GetResponse(SendRequestError),
     GetResponseBody(PayloadError),
     ResponseFormat {
