@@ -21,11 +21,11 @@ use std::pin::Pin;
 mod actor;
 mod events;
 mod get_entity;
+mod http_client;
 mod init;
 mod prelude;
 mod stream_ext;
 mod warp_server;
-mod http_client;
 
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {

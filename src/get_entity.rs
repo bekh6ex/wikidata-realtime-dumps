@@ -12,14 +12,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use futures::*;
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
-use hyper::{Response, StatusCode};
+
 use hyper_rustls::HttpsConnector;
 
-use hyper::{Body, Client as HyperClient, Request};
-
+use hyper::{Body, Client as HyperClient};
 
 type Client = HyperClient<HttpsConnector<HttpConnector<GaiResolver>>, Body>;
 
@@ -97,79 +95,33 @@ async fn get_entity_internal(
     client: Arc<Client>,
     id: EntityId,
 ) -> Result<Option<GetEntityResult>, Error> {
-    let req = Request::builder()
-        .method("GET")
-        .header("Accept-Encoding", "deflate")
-        .uri(format!(
-            "https://www.wikidata.org/wiki/Special:EntityData/{}.json",
-            id
-        ))
-        .body(Body::empty())
-        .unwrap();
-
-    debug!("Sending get entity request. id={}", id);
-    let response: Response<Body> = client.request(req).await.map_err(Error::GetResponse)?;
-
-    debug!(
-        "Got entity response. status={} id={}",
-        response.status(),
+    let url = format!(
+        "https://www.wikidata.org/wiki/Special:EntityData/{}.json",
         id
     );
-
-    if response.status() == StatusCode::NOT_FOUND {
+    let response = get_json::<SpecialEntityResponse>(&client, url).await?;
+    if response.is_none() {
         return Ok(None);
-    } else if response.status() == StatusCode::TOO_MANY_REQUESTS {
-        // TODO: Maybe handle 'retry-after' header in response
-        return Err(Error::TooManyRequests);
     }
-
-    use bytes::buf::BufExt;
-    use bytes::Buf;
-
-    let body = hyper::body::aggregate(response)
-        .map_err(Error::GetResponse)
-        .await?
-        .to_bytes();
-
-    let body_for_error = body.clone();
-
-    let response =
-        serde_json::from_reader::<_, WikidataResponse>(body.reader()).map_err(move |e| {
-            Error::ResponseFormat {
-                cause: e,
-                body: std::str::from_utf8(body_for_error.bytes())
-                    .unwrap()
-                    .to_owned(),
-            }
-        })?;
+    let response = response.unwrap();
 
     // Entity might be a redirect to another one which will be automatically resolved.
     // The response will then contains some other entity which should be ignored.
-    let value = response.entities.get(&id.to_string());
+    let value = response.extract(id);
     if value.is_none() {
         return Ok(None);
     }
-
     let value = value.unwrap();
 
-    let data = serde_json::to_string(value)
+    let data = serde_json::to_string(&value)
         .unwrap_or_else(|_| panic!("Serialize {} entity back failed O_o", id));
 
-    let revision = RevisionId(extract_revision_id(id, value));
+    let revision = RevisionId(extract_revision_id(id, &value));
 
     Ok(Some(GetEntityResult { id, revision, data }))
 }
 
-#[derive(Debug)]
-pub enum Error {
-    TooManyRequests,
-    GetResponse(hyper::Error),
-    ResponseFormat {
-        cause: serde_json::Error,
-        body: String,
-    },
-}
-
+use crate::http_client::{get_json, Error};
 fn extract_revision_id(id: EntityId, value: &Value) -> u64 {
     value
         .as_object()
@@ -194,6 +146,12 @@ impl GetEntityResult {
 }
 
 #[derive(Deserialize, Debug)]
-struct WikidataResponse {
+struct SpecialEntityResponse {
     entities: serde_json::Map<String, serde_json::Value>,
+}
+
+impl SpecialEntityResponse {
+    fn extract(mut self, id: EntityId) -> Option<serde_json::Value> {
+        self.entities.remove(&id.to_string())
+    }
 }

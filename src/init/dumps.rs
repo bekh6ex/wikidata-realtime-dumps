@@ -10,10 +10,10 @@ use log::*;
 use serde::Deserialize;
 
 use crate::actor::SerializedEntity;
+use crate::http_client::create_client;
 use crate::prelude::{EntityType, RevisionId};
 use crate::stream_ext::continuous_download::ContinuousDownloadStream;
 use crate::stream_ext::sorted::BufferedSortedStream;
-use crate::http_client::create_client;
 use hyper::body::Bytes;
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
@@ -36,8 +36,8 @@ fn convert_to_serialized_entity(
     stream: impl Stream<Item = String>,
 ) -> impl Stream<Item = SerializedEntity> {
     stream.filter_map(move |s: String| {
-        let result =
-            serde_json::from_str::<EntityInDump>(&s).unwrap_or_else(|_| panic!("Wrong entity format: {}", s));
+        let result = serde_json::from_str::<EntityInDump>(&s)
+            .unwrap_or_else(|_| panic!("Wrong entity format: {}", s));
 
         ready(match ty.parse_id(&result.id) {
             Err(e) => {

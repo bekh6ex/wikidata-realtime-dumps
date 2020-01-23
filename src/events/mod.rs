@@ -143,7 +143,11 @@ async fn get_proper_event_stream(event_id: Option<EventId>) -> impl Stream<Item 
 
             // Rewind EventId couple seconds back. Event stream has a bit random order of events,
             // so to get all of them we should go back a little.
-            let id = id.map(|i| EventId::new(i).rewind(Duration::from_secs(2)).to_json_string());
+            let id = id.map(|i| {
+                EventId::new(i)
+                    .rewind(Duration::from_secs(2))
+                    .to_json_string()
+            });
             once(open_new_sse_stream(id)).flatten()
         },
         1000,

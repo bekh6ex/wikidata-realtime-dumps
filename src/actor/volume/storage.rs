@@ -195,7 +195,8 @@ impl<P: AsRef<Path>> GzChunkStorage<P> {
                 .unwrap_or_else(|_| panic!("Failed to create directory '{:?}'", dir_path));
             // TODO: Maybe use sync_all() here?
             // TODO: Write to tmp file and them move, to reduce the risk of having broken file
-            fs::write(self.path.as_ref(), data).unwrap_or_else(|_| panic!("Writing to file '{:?}' failed", self.path.as_ref()));
+            fs::write(self.path.as_ref(), data)
+                .unwrap_or_else(|_| panic!("Writing to file '{:?}' failed", self.path.as_ref()));
         }
     }
 }
