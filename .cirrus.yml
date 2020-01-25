@@ -9,7 +9,7 @@ test_task:
   test_script: cargo test
   before_cache_script: rm -rf $CARGO_HOME/registry/index
 
-test_continuous_download:
+test_continuous_download_task:
   cargo_cache:
     folder: $CARGO_HOME/registry
     fingerprint_script: cat continuous_download/Cargo.toml
