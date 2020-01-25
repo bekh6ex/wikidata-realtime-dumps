@@ -24,6 +24,9 @@ pub struct ContinuousDownloadStream<St: Stream + 'static, Cr> {
     retry_interval_ms: u64,
 }
 
+// TODO: Retry should be removed. It's easy enough to do it in creator.
+//       Instead, failure number can be provided.
+
 impl<S, Cr, R, E> ContinuousDownloadStream<S, Cr>
     where
         S: Stream<Item = Result<R, E>>,
