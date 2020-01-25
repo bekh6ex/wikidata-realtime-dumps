@@ -1,6 +1,5 @@
 use std::fmt::Debug;
 
-pub mod sorted;
 
 pub mod join_streams;
 

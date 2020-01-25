@@ -1,14 +1,14 @@
 use std::pin::Pin;
 
-use super::*;
 use futures::task::{Context, Poll};
-use futures::{stream::FusedStream, Stream};
+use futures::stream::{FusedStream, Stream};
 use pin_utils::{unsafe_pinned, unsafe_unpinned};
 use std::collections::BTreeMap;
+use std::fmt::Debug;
 
 pub struct BufferedSortedStream<I, St>
-where
-    I: Sequential,
+    where
+        I: Sequential,
 {
     buffer: BTreeMap<I::Marker, Vec<I>>,
     stream: St,
@@ -16,9 +16,9 @@ where
 }
 
 impl<I, St> BufferedSortedStream<I, St>
-where
-    I: Sequential,
-    St: FusedStream<Item = I>,
+    where
+        I: Sequential,
+        St: FusedStream<Item = I>,
 {
     unsafe_pinned!(stream: St);
     // TODO: Is it safe? O_o
@@ -47,9 +47,9 @@ where
 }
 
 impl<I, St> Stream for BufferedSortedStream<I, St>
-where
-    I: Sequential,
-    St: FusedStream<Item = I>,
+    where
+        I: Sequential,
+        St: FusedStream<Item = I>,
 {
     type Item = I;
 
@@ -100,6 +100,12 @@ where
         }
     }
 }
+
+pub trait Sequential {
+    type Marker: Ord + Clone + Debug;
+    fn seq_marker(&self) -> Self::Marker;
+}
+
 
 #[cfg(test)]
 mod test {

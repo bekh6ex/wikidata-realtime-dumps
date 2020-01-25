@@ -1,4 +1,4 @@
-use crate::stream_ext::Sequential;
+use sorted_stream::Sequential;
 use serde::export::fmt::Error;
 use serde::export::Formatter;
 use serde::{Deserialize, Serialize};

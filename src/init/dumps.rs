@@ -12,7 +12,7 @@ use serde::Deserialize;
 use crate::http_client::create_client;
 use crate::prelude::*;
 use continuous_download::ContinuousDownloadStream;
-use crate::stream_ext::sorted::BufferedSortedStream;
+use sorted_stream::BufferedSortedStream;
 use hyper::body::Bytes;
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;

@@ -14,8 +14,8 @@ use crate::http_client::create_client;
 
 use super::prelude::*;
 use crate::events::event_stream::response_to_stream;
-use crate::stream_ext::sorted::BufferedSortedStream;
-use crate::stream_ext::Sequential;
+use sorted_stream::BufferedSortedStream;
+use sorted_stream::Sequential;
 use std::cmp::Ordering;
 
 mod event_stream;

@@ -428,7 +428,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "continuous-download"
+name = "continuous_download"
 version = "0.1.0"
 dependencies = [
  "futures 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1792,6 +1792,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "sorted_stream"
+version = "0.1.0"
+dependencies = [
+ "futures 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "pin-utils 0.1.0-alpha.4 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "sourcefile"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2248,7 +2256,7 @@ dependencies = [
  "async-compression 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "async-std 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bytes 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "continuous-download 0.1.0",
+ "continuous_download 0.1.0",
  "flate2 1.0.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures-test 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2265,6 +2273,7 @@ dependencies = [
  "rand 0.7.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.45 (registry+https://github.com/rust-lang/crates.io-index)",
+ "sorted_stream 0.1.0",
  "sse-codec 0.1.0 (git+https://github.com/bekh6ex/sse-codec.git?branch=fix-stream-bug)",
  "warp 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
