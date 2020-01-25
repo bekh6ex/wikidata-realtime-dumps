@@ -1,5 +1,3 @@
-
-
 use futures::*;
 
 use hyper::client::connect::dns::GaiResolver;
@@ -7,9 +5,7 @@ use hyper::client::HttpConnector;
 use hyper::{Body, Client as HyperClient, Request, Response, StatusCode};
 use hyper_rustls::HttpsConnector;
 
-
 use log::*;
-
 
 use serde::de::Deserialize;
 

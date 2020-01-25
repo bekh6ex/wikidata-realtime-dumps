@@ -8,7 +8,7 @@ use log::*;
 
 use pin_utils::{unsafe_pinned, unsafe_unpinned};
 
-use crate::actor::SerializedEntity;
+use crate::archive::SerializedEntity;
 use crate::prelude::EntityId;
 use futures::future::Either;
 use std::cmp::Ordering;
@@ -121,7 +121,7 @@ mod test {
 
     use futures_test::*;
 
-    use crate::actor::SerializedEntity;
+    use crate::archive::SerializedEntity;
     use crate::prelude::{EntityId, EntityType, RevisionId};
 
     use super::*;

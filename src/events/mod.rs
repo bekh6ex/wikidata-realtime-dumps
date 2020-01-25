@@ -8,7 +8,7 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use sse_codec::Event;
 
-use crate::actor::UpdateCommand;
+use crate::archive::UpdateCommand;
 use crate::get_entity::get_entity;
 use crate::http_client::create_client;
 

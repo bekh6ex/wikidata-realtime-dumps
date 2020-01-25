@@ -9,7 +9,7 @@ use hyper::{Body, Client, Request};
 use log::*;
 use serde::Deserialize;
 
-use crate::actor::SerializedEntity;
+use crate::archive::SerializedEntity;
 use crate::http_client::create_client;
 use crate::prelude::{EntityType, RevisionId};
 use crate::stream_ext::continuous_download::ContinuousDownloadStream;

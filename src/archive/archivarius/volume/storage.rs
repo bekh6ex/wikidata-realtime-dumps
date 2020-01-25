@@ -1,4 +1,4 @@
-use crate::actor::SerializedEntity;
+use crate::archive::SerializedEntity;
 use crate::prelude::{EntityId, EntityType, RevisionId};
 use bytes::Bytes;
 use log::*;

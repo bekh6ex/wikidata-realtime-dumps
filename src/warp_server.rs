@@ -9,8 +9,8 @@ use hyper::{Body, StatusCode};
 use warp::reply::Response;
 use warp::*;
 
-use crate::actor::archivarius::Archivarius;
-use crate::actor::GetDump;
+use crate::archive::archivarius::Archivarius;
+use crate::archive::GetDump;
 use crate::prelude::EntityType;
 
 pub(super) async fn start(ar: &Arc<BTreeMap<EntityType, Addr<Archivarius>>>) {

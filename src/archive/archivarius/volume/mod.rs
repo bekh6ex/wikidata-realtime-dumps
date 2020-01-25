@@ -1,5 +1,5 @@
-use crate::actor::SerializedEntity;
-use crate::actor::UpdateChunkCommand;
+use crate::archive::SerializedEntity;
+use crate::archive::UpdateChunkCommand;
 use actix::{Actor, Context, Handler, Message, MessageResult};
 use bytes::Bytes;
 
@@ -10,10 +10,10 @@ use storage::GzippedData;
 
 use std::collections::BTreeMap;
 
-mod storage;
 mod keeper;
+mod storage;
 
-use crate::actor::volume::storage::Volume;
+use crate::archive::volume::storage::Volume;
 use storage::VolumeStorage;
 
 pub struct VolumeKeeper {

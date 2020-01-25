@@ -69,7 +69,7 @@ pub trait HasPrevious {
 
 #[cfg(test)]
 mod tests {
-    use crate::actor::archivarius::tracker::{HasPrevious, Tracker};
+    use crate::archive::archivarius::tracker::{HasPrevious, Tracker};
 
     #[test]
     fn has_no_persisted_items_when_just_initialized() {

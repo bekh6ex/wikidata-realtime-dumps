@@ -1,4 +1,3 @@
-#![type_length_limit = "12557260"]
 #![forbid(unsafe_code)]
 #![warn(unused_extern_crates)]
 
@@ -11,17 +10,14 @@ use futures::stream::{self, once};
 use futures::{self, StreamExt};
 use log::*;
 
-use crate::actor::archivarius::{Archivarius, InitializationFinished, StartInitialization};
-use crate::actor::UpdateCommand;
+use self::archive::{start, ArchivariusMap};
+use crate::archive::archivarius::{Archivarius, InitializationFinished, StartInitialization};
+use crate::archive::UpdateCommand;
 use crate::events::{get_current_event_id, update_command_stream, EventId};
 use crate::prelude::EntityType;
-use std::iter::FromIterator;
 use std::pin::Pin;
-use num_cpus;
-use crate::actor::arbiter_pool::ArbiterPool;
-use std::num::NonZeroUsize;
 
-mod actor;
+mod archive;
 mod events;
 mod get_entity;
 mod http_client;
@@ -29,7 +25,6 @@ mod init;
 mod prelude;
 mod stream_ext;
 mod warp_server;
-
 
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {
@@ -42,8 +37,7 @@ async fn main() -> std::io::Result<()> {
     let types = vec![EntityType::Item];
     //    let types = vec![EntityType::Lexeme, EntityType::Property, EntityType::Item];
 
-
-    let map: ArchivariusMap = start_actors(types);
+    let map: ArchivariusMap = start(types);
 
     let ws = warp_server::start(&map);
 
@@ -87,25 +81,6 @@ async fn get_streams(
     });
 
     Box::pin(res)
-}
-
-type ArchivariusMap = Arc<BTreeMap<EntityType, Addr<Archivarius>>>;
-
-fn start_actors(types: Vec<EntityType>) -> ArchivariusMap {
-    let cpu_number = num_cpus::get();
-
-    // Multiplying cores by X, because Volume actors a synchronous and block the thread.
-    // This way we can utilize cpu for 100% percent.
-    let actor_number = NonZeroUsize::new(cpu_number * 2).unwrap();
-    let arbiter_pool = ArbiterPool::new(actor_number);
-
-    let tuples = types.iter().map(move |ty| {
-        let act = Archivarius::new(*ty, arbiter_pool.clone()).start();
-        (*ty, act)
-    });
-
-    let map: BTreeMap<EntityType, Addr<Archivarius>> = BTreeMap::from_iter(tuples);
-    Arc::new(map)
 }
 
 async fn initialize(ty: EntityType, actor: Addr<Archivarius>) -> EventId {

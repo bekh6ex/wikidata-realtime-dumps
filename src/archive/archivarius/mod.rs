@@ -10,12 +10,12 @@ use futures::StreamExt;
 use log::*;
 use serde::{Deserialize, Serialize};
 
-use crate::actor::volume::{GetChunk, VolumeKeeper};
-use crate::actor::{GetDump, GetDumpResult, UnitFuture, UpdateChunkCommand, UpdateCommand};
+use crate::archive::volume::{GetChunk, VolumeKeeper};
+use crate::archive::{GetDump, GetDumpResult, UnitFuture, UpdateChunkCommand, UpdateCommand};
 use crate::events::EventId;
 use crate::prelude::*;
 
-use crate::actor::arbiter_pool::ArbiterPool;
+use crate::archive::arbiter_pool::ArbiterPool;
 
 mod tracker;
 pub mod volume;
@@ -52,7 +52,6 @@ impl Archivarius {
         state: StoredState,
         arbiters: ArbiterPool,
     ) -> Archivarius {
-
         let closed_actors = state
             .closed
             .iter()
@@ -135,7 +134,6 @@ impl Archivarius {
 
     fn close_current_open_actor(&mut self) {
         let new_id = self.closed_actors.len() + 1;
-
 
         let ty = self.ty;
         let initializing = self.initialization_in_progress();

@@ -1,17 +1,25 @@
+use self::archivarius::Archivarius;
 use super::prelude::*;
+use crate::archive::arbiter_pool::ArbiterPool;
 use crate::events::EventId;
 use crate::stream_ext::Sequential;
-use actix::prelude::Stream;
-use actix::Message;
+use actix::prelude::*;
+use actix::{Addr, Message};
 use bytes::Bytes;
+use num_cpus;
 use std::future::Future;
+use std::iter::FromIterator;
+use std::num::NonZeroUsize;
 use std::pin::Pin;
 
 use self::archivarius::volume;
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
+pub type ArchivariusMap = Arc<BTreeMap<EntityType, Addr<Archivarius>>>;
 
-pub mod archivarius;
 pub mod arbiter_pool;
+pub mod archivarius;
 
 pub struct GetDump;
 
@@ -55,4 +63,21 @@ impl Sequential for SerializedEntity {
 
 impl Message for UpdateChunkCommand {
     type Result = usize;
+}
+
+pub(super) fn start(types: Vec<EntityType>) -> ArchivariusMap {
+    let cpu_number = num_cpus::get();
+
+    // Multiplying cores by X, because Volume actors a synchronous and block the thread.
+    // This way we can utilize cpu for 100% percent.
+    let actor_number = NonZeroUsize::new(cpu_number * 2).unwrap();
+    let arbiter_pool = ArbiterPool::new(actor_number);
+
+    let tuples = types.iter().map(move |ty| {
+        let act = Archivarius::new(*ty, arbiter_pool.clone()).start();
+        (*ty, act)
+    });
+
+    let map: BTreeMap<EntityType, Addr<Archivarius>> = BTreeMap::from_iter(tuples);
+    Arc::new(map)
 }

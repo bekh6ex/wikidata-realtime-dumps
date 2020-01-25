@@ -1,4 +1,4 @@
-use crate::actor::SerializedEntity;
+use crate::archive::SerializedEntity;
 use crate::prelude::*;
 
 use log::*;
