@@ -17,18 +17,18 @@ pub trait VolumeStorage {
 }
 
 #[derive(Debug)]
-pub enum ClosableStorage<P: AsRef<Path> + Debug> {
-    Mem {
+pub enum Volume<P: AsRef<Path> + Debug> {
+    Open {
         storage: MemStorage,
         ty: EntityType,
         path: P,
     },
-    Gz(GzChunkStorage<P>),
+    Closed(GzChunkStorage<P>),
 }
 
-impl<P: AsRef<Path> + Clone + Debug> ClosableStorage<P> {
+impl<P: AsRef<Path> + Clone + Debug> Volume<P> {
     pub(super) fn new_open(ty: EntityType, path: P) -> Self {
-        ClosableStorage::Mem {
+        Volume::Open {
             storage: MemStorage::new(),
             ty,
             path,
@@ -36,21 +36,21 @@ impl<P: AsRef<Path> + Clone + Debug> ClosableStorage<P> {
     }
 
     pub(super) fn new_closed(ty: EntityType, path: P) -> Self {
-        ClosableStorage::Gz(GzChunkStorage::new(ty, path))
+        Volume::Closed(GzChunkStorage::new(ty, path))
     }
 
     pub fn close(self) -> Self {
         match &self {
-            ClosableStorage::Mem { storage, path, ty } => {
+            Volume::Open { storage, path, ty } => {
                 debug!("Closing storage with path {:?}", path);
 
-                ClosableStorage::Gz(GzChunkStorage::new_initialized(
+                Volume::Closed(GzChunkStorage::new_initialized(
                     *ty,
                     path.clone(),
                     storage.load(),
                 ))
             }
-            ClosableStorage::Gz(_) => {
+            Volume::Closed(_) => {
                 warn!("Trying to close Gz storage");
                 self
             }
@@ -58,11 +58,11 @@ impl<P: AsRef<Path> + Clone + Debug> ClosableStorage<P> {
     }
 }
 
-impl<P: AsRef<Path> + Debug> VolumeStorage for ClosableStorage<P> {
+impl<P: AsRef<Path> + Debug> VolumeStorage for Volume<P> {
     fn load(&self) -> GzippedData {
         match &self {
-            ClosableStorage::Mem { storage, .. } => storage.load(),
-            ClosableStorage::Gz(storage) => storage.load(),
+            Volume::Open { storage, .. } => storage.load(),
+            Volume::Closed(storage) => storage.load(),
         }
     }
 
@@ -72,8 +72,8 @@ impl<P: AsRef<Path> + Debug> VolumeStorage for ClosableStorage<P> {
         Self: Sized,
     {
         match self {
-            ClosableStorage::Mem { storage, .. } => storage.change(f),
-            ClosableStorage::Gz(storage) => storage.change(f),
+            Volume::Open { storage, .. } => storage.change(f),
+            Volume::Closed(storage) => storage.change(f),
         }
     }
 }

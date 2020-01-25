@@ -10,7 +10,7 @@ use futures::StreamExt;
 use log::*;
 use serde::{Deserialize, Serialize};
 
-use crate::actor::volume::{GetChunk, VolumeActor};
+use crate::actor::volume::{GetChunk, VolumeKeeper};
 use crate::actor::{GetDump, GetDumpResult, UnitFuture, UpdateChunkCommand, UpdateCommand};
 use crate::events::EventId;
 use crate::prelude::*;
@@ -25,20 +25,20 @@ const ARBITERS: usize = 8;
 const MAX_CHUNK_SIZE: usize = 22 * 1024 * 1024;
 //const MAX_CHUNK_SIZE: usize = 5 * 1024 * 1024;
 
-pub struct ArchivariusActor {
+pub struct Archivarius {
     store: ArchivariusStore<String>,
     ty: EntityType,
     everything_is_persisted: bool,
-    closed_actors: Vec<(EntityRange, Addr<VolumeActor>)>,
-    open_actor: Addr<VolumeActor>,
+    closed_actors: Vec<(EntityRange, Addr<VolumeKeeper>)>,
+    open_actor: Addr<VolumeKeeper>,
     last_id_to_open_actor: Option<EntityId>,
     arbiters: ArbiterPool,
     last_processed_event_id: Option<EventId>,
     // initialized_up_to - last EntityId of persisted actor
 }
 
-impl ArchivariusActor {
-    pub fn new(ty: EntityType, arbiters: ArbiterPool) -> ArchivariusActor {
+impl Archivarius {
+    pub fn new(ty: EntityType, arbiters: ArbiterPool) -> Archivarius {
         let store = ArchivariusStore::new(format!("/tmp/wd-rt-dumps/{:?}/archivarius.json", ty));
 
         let state = store.load().unwrap_or_default();
@@ -51,15 +51,15 @@ impl ArchivariusActor {
         store: ArchivariusStore<String>,
         state: StoredState,
         arbiters: ArbiterPool,
-    ) -> ArchivariusActor {
+    ) -> Archivarius {
 
         let closed_actors = state
             .closed
             .iter()
             .enumerate()
             .map(|(id, er)| {
-                let vol = VolumeActor::start_in_arbiter(arbiters.next().as_ref(), move |_| {
-                    volume::VolumeActor::persistent(ty, id as i32)
+                let vol = VolumeKeeper::start_in_arbiter(arbiters.next().as_ref(), move |_| {
+                    volume::VolumeKeeper::persistent(ty, id as i32)
                 });
 
                 (er.clone(), vol)
@@ -69,15 +69,15 @@ impl ArchivariusActor {
         let last_id_to_open_actor: Option<EntityId> = state.open_volume_last_entity_id;
         let initialized = state.initialized;
 
-        let open_actor = VolumeActor::start_in_arbiter(arbiters.next().as_ref(), move |_| {
+        let open_actor = VolumeKeeper::start_in_arbiter(arbiters.next().as_ref(), move |_| {
             if initialized {
-                VolumeActor::persistent(ty, new_id as i32)
+                VolumeKeeper::persistent(ty, new_id as i32)
             } else {
-                VolumeActor::in_memory(ty, new_id as i32)
+                VolumeKeeper::in_memory(ty, new_id as i32)
             }
         });
 
-        ArchivariusActor {
+        Archivarius {
             store,
             ty,
             everything_is_persisted: initialized,
@@ -104,14 +104,14 @@ impl ArchivariusActor {
         !self.everything_is_persisted
     }
 
-    fn find_closed(&self, id: EntityId) -> Option<Addr<VolumeActor>> {
+    fn find_closed(&self, id: EntityId) -> Option<Addr<VolumeKeeper>> {
         self.closed_actors
             .iter()
             .find(|(range, _actor)| range.inner.contains(&id))
             .map(|(_, a)| a.clone())
     }
 
-    fn find_volume(&self, id: EntityId) -> (bool, Addr<VolumeActor>) {
+    fn find_volume(&self, id: EntityId) -> (bool, Addr<VolumeKeeper>) {
         let target_actor = self.find_closed(id);
 
         match target_actor {
@@ -120,7 +120,7 @@ impl ArchivariusActor {
         }
     }
 
-    fn maybe_close_the_open_volume(self_addr: &Addr<Self>, child: Addr<VolumeActor>, size: usize) {
+    fn maybe_close_the_open_volume(self_addr: &Addr<Self>, child: Addr<VolumeKeeper>, size: usize) {
         if size > MAX_CHUNK_SIZE {
             debug!("Schedule the open actor closing. chunk_size={}", size);
             self_addr.do_send(CloseOpenActor { addr: child });
@@ -141,11 +141,11 @@ impl ArchivariusActor {
         let initializing = self.initialization_in_progress();
 
         let new_open_actor =
-            VolumeActor::start_in_arbiter(self.arbiters.next().as_ref(), move |_| {
+            VolumeKeeper::start_in_arbiter(self.arbiters.next().as_ref(), move |_| {
                 if initializing {
-                    VolumeActor::in_memory(ty, new_id as i32)
+                    VolumeKeeper::in_memory(ty, new_id as i32)
                 } else {
-                    VolumeActor::persistent(ty, new_id as i32)
+                    VolumeKeeper::persistent(ty, new_id as i32)
                 }
             });
 
@@ -172,14 +172,14 @@ impl ArchivariusActor {
     }
 }
 
-impl Actor for ArchivariusActor {
+impl Actor for Archivarius {
     type Context = Context<Self>;
     fn started(&mut self, _ctx: &mut Self::Context) {
         info!("ArchiveActor started!")
     }
 }
 
-impl Handler<GetDump> for ArchivariusActor {
+impl Handler<GetDump> for Archivarius {
     type Result = MessageResult<GetDump>;
 
     fn handle(&mut self, _msg: GetDump, _ctx: &mut Self::Context) -> Self::Result {
@@ -212,7 +212,7 @@ impl Handler<GetDump> for ArchivariusActor {
     }
 }
 
-impl Handler<UpdateCommand> for ArchivariusActor {
+impl Handler<UpdateCommand> for Archivarius {
     type Result = MessageResult<UpdateCommand>;
 
     fn handle(&mut self, msg: UpdateCommand, ctx: &mut Self::Context) -> Self::Result {
@@ -247,7 +247,7 @@ impl Handler<UpdateCommand> for ArchivariusActor {
     }
 }
 
-impl Handler<InitializationFinished> for ArchivariusActor {
+impl Handler<InitializationFinished> for Archivarius {
     type Result = Arc<()>;
 
     fn handle(&mut self, _msg: InitializationFinished, _ctx: &mut Self::Context) -> Self::Result {
@@ -261,14 +261,14 @@ impl Handler<InitializationFinished> for ArchivariusActor {
 }
 
 struct CloseOpenActor {
-    addr: Addr<VolumeActor>,
+    addr: Addr<VolumeKeeper>,
 }
 
 impl Message for CloseOpenActor {
     type Result = ();
 }
 
-impl Handler<CloseOpenActor> for ArchivariusActor {
+impl Handler<CloseOpenActor> for Archivarius {
     type Result = MessageResult<CloseOpenActor>;
 
     fn handle(&mut self, msg: CloseOpenActor, _ctx: &mut Self::Context) -> Self::Result {
@@ -288,7 +288,7 @@ impl Message for UpdateLastEventEventId {
     type Result = ();
 }
 
-impl Handler<UpdateLastEventEventId> for ArchivariusActor {
+impl Handler<UpdateLastEventEventId> for Archivarius {
     type Result = MessageResult<UpdateLastEventEventId>;
 
     fn handle(
@@ -313,7 +313,7 @@ impl Message for StartInitialization {
     type Result = StartInitializationResponse;
 }
 
-impl Handler<StartInitialization> for ArchivariusActor {
+impl Handler<StartInitialization> for Archivarius {
     type Result = MessageResult<StartInitialization>;
 
     fn handle(&mut self, _msg: StartInitialization, _ctx: &mut Self::Context) -> Self::Result {

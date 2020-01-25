@@ -9,11 +9,11 @@ use hyper::{Body, StatusCode};
 use warp::reply::Response;
 use warp::*;
 
-use crate::actor::archivarius::ArchivariusActor;
+use crate::actor::archivarius::Archivarius;
 use crate::actor::GetDump;
 use crate::prelude::EntityType;
 
-pub(super) async fn start(ar: &Arc<BTreeMap<EntityType, Addr<ArchivariusActor>>>) {
+pub(super) async fn start(ar: &Arc<BTreeMap<EntityType, Addr<Archivarius>>>) {
     let hello = get_dump_route(ar);
 
     let ws = warp::serve(hello).run("127.0.0.1:8080".parse::<SocketAddrV4>().unwrap());
@@ -21,7 +21,7 @@ pub(super) async fn start(ar: &Arc<BTreeMap<EntityType, Addr<ArchivariusActor>>>
 }
 
 fn get_dump_route(
-    ar: &Arc<BTreeMap<EntityType, Addr<ArchivariusActor>>>,
+    ar: &Arc<BTreeMap<EntityType, Addr<Archivarius>>>,
 ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("dumps" / String)
         .and(warp::get())
@@ -30,9 +30,9 @@ fn get_dump_route(
 }
 
 fn with_actor(
-    ar: &Arc<BTreeMap<EntityType, Addr<ArchivariusActor>>>,
+    ar: &Arc<BTreeMap<EntityType, Addr<Archivarius>>>,
 ) -> impl Filter<
-    Extract = (Arc<BTreeMap<EntityType, Addr<ArchivariusActor>>>,),
+    Extract = (Arc<BTreeMap<EntityType, Addr<Archivarius>>>,),
     Error = std::convert::Infallible,
 > + Clone {
     let ar = ar.clone();
@@ -47,7 +47,7 @@ const ENTITY_NAMES: [(&str, EntityType); 3] = [
 
 async fn get_dump_handler(
     mut ty: String,
-    map: Arc<BTreeMap<EntityType, Addr<ArchivariusActor>>>,
+    map: Arc<BTreeMap<EntityType, Addr<Archivarius>>>,
 ) -> Result<impl warp::Reply, Infallible> {
     use futures::StreamExt;
     // TODO: As long as we return chunks in order we can make it possible to return only certain

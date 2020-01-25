@@ -11,7 +11,7 @@ use futures::stream::{self, once};
 use futures::{self, StreamExt};
 use log::*;
 
-use crate::actor::archivarius::{ArchivariusActor, InitializationFinished, StartInitialization};
+use crate::actor::archivarius::{Archivarius, InitializationFinished, StartInitialization};
 use crate::actor::UpdateCommand;
 use crate::events::{get_current_event_id, update_command_stream, EventId};
 use crate::prelude::EntityType;
@@ -56,11 +56,11 @@ async fn main() -> std::io::Result<()> {
 }
 
 async fn get_streams(
-    map: Arc<BTreeMap<EntityType, Addr<ArchivariusActor>>>,
+    map: Arc<BTreeMap<EntityType, Addr<Archivarius>>>,
 ) -> Pin<Box<dyn Future<Output = ()>>> {
     fn to_vec(
-        map: Arc<BTreeMap<EntityType, Addr<ArchivariusActor>>>,
-    ) -> Vec<(EntityType, Addr<ArchivariusActor>)> {
+        map: Arc<BTreeMap<EntityType, Addr<Archivarius>>>,
+    ) -> Vec<(EntityType, Addr<Archivarius>)> {
         map.iter()
             .map(|(ty, ad)| (*ty, ad.clone()))
             .collect::<Vec<_>>()
@@ -89,7 +89,7 @@ async fn get_streams(
     Box::pin(res)
 }
 
-type ArchivariusMap = Arc<BTreeMap<EntityType, Addr<ArchivariusActor>>>;
+type ArchivariusMap = Arc<BTreeMap<EntityType, Addr<Archivarius>>>;
 
 fn start_actors(types: Vec<EntityType>) -> ArchivariusMap {
     let cpu_number = num_cpus::get();
@@ -100,15 +100,15 @@ fn start_actors(types: Vec<EntityType>) -> ArchivariusMap {
     let arbiter_pool = ArbiterPool::new(actor_number);
 
     let tuples = types.iter().map(move |ty| {
-        let act = ArchivariusActor::new(*ty, arbiter_pool.clone()).start();
+        let act = Archivarius::new(*ty, arbiter_pool.clone()).start();
         (*ty, act)
     });
 
-    let map: BTreeMap<EntityType, Addr<ArchivariusActor>> = BTreeMap::from_iter(tuples);
+    let map: BTreeMap<EntityType, Addr<Archivarius>> = BTreeMap::from_iter(tuples);
     Arc::new(map)
 }
 
-async fn initialize(ty: EntityType, actor: Addr<ArchivariusActor>) -> EventId {
+async fn initialize(ty: EntityType, actor: Addr<Archivarius>) -> EventId {
     let current = get_current_event_id();
 
     let response = actor

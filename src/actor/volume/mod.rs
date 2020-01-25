@@ -11,20 +11,21 @@ use storage::GzippedData;
 use std::collections::BTreeMap;
 
 mod storage;
+mod keeper;
 
-use crate::actor::volume::storage::ClosableStorage;
+use crate::actor::volume::storage::Volume;
 use storage::VolumeStorage;
 
-pub struct VolumeActor {
+pub struct VolumeKeeper {
     i: i32,
-    storage: Option<ClosableStorage<String>>,
+    storage: Option<Volume<String>>,
 }
 
-impl VolumeActor {
-    pub fn in_memory(ty: EntityType, i: i32) -> VolumeActor {
-        VolumeActor {
+impl VolumeKeeper {
+    pub fn in_memory(ty: EntityType, i: i32) -> VolumeKeeper {
+        VolumeKeeper {
             i,
-            storage: Some(ClosableStorage::new_open(
+            storage: Some(Volume::new_open(
                 ty,
                 format!("/tmp/wd-rt-dumps/{:?}/{}.gz", ty, i),
             )),
@@ -32,9 +33,9 @@ impl VolumeActor {
     }
 
     pub fn persistent(ty: EntityType, i: i32) -> Self {
-        VolumeActor {
+        VolumeKeeper {
             i,
-            storage: Some(ClosableStorage::new_closed(
+            storage: Some(Volume::new_closed(
                 ty,
                 format!("/tmp/wd-rt-dumps/{:?}/{}.gz", ty, i),
             )),
@@ -52,7 +53,7 @@ impl VolumeActor {
     }
 }
 
-impl Handler<UpdateChunkCommand> for VolumeActor {
+impl Handler<UpdateChunkCommand> for VolumeKeeper {
     type Result = MessageResult<UpdateChunkCommand>;
 
     fn handle(&mut self, msg: UpdateChunkCommand, _ctx: &mut Self::Context) -> Self::Result {
@@ -90,7 +91,7 @@ impl Message for GetChunk {
     type Result = Bytes;
 }
 
-impl Handler<GetChunk> for VolumeActor {
+impl Handler<GetChunk> for VolumeKeeper {
     type Result = MessageResult<GetChunk>;
 
     fn handle(&mut self, _msg: GetChunk, _ctx: &mut Self::Context) -> Self::Result {
@@ -102,7 +103,7 @@ impl Handler<GetChunk> for VolumeActor {
     }
 }
 
-impl Actor for VolumeActor {
+impl Actor for VolumeKeeper {
     type Context = Context<Self>;
 }
 
@@ -112,7 +113,7 @@ impl Message for Persist {
     type Result = ();
 }
 
-impl Handler<Persist> for VolumeActor {
+impl Handler<Persist> for VolumeKeeper {
     type Result = MessageResult<Persist>;
 
     fn handle(&mut self, _msg: Persist, _ctx: &mut Self::Context) -> Self::Result {
