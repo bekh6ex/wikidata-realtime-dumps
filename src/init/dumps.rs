@@ -9,9 +9,8 @@ use hyper::{Body, Client, Request};
 use log::*;
 use serde::Deserialize;
 
-use crate::archive::SerializedEntity;
 use crate::http_client::create_client;
-use crate::prelude::{EntityType, RevisionId};
+use crate::prelude::*;
 use crate::stream_ext::continuous_download::ContinuousDownloadStream;
 use crate::stream_ext::sorted::BufferedSortedStream;
 use hyper::body::Bytes;

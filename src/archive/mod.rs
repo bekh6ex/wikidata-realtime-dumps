@@ -2,7 +2,6 @@ use self::archivarius::Archivarius;
 use super::prelude::*;
 use crate::archive::arbiter_pool::ArbiterPool;
 use crate::events::EventId;
-use crate::stream_ext::Sequential;
 use actix::prelude::*;
 use actix::{Addr, Message};
 use bytes::Bytes;
@@ -44,21 +43,6 @@ pub type UnitFuture = Pin<Box<dyn Future<Output = ()> + Send + Sync>>;
 
 pub struct UpdateChunkCommand {
     pub entity: SerializedEntity,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct SerializedEntity {
-    pub id: EntityId,
-    pub revision: RevisionId,
-    pub data: String,
-}
-
-impl Sequential for SerializedEntity {
-    type Marker = EntityId;
-
-    fn seq_marker(&self) -> Self::Marker {
-        self.id
-    }
 }
 
 impl Message for UpdateChunkCommand {

@@ -8,7 +8,7 @@ use log::*;
 use serde::Deserialize;
 use warp::Future;
 
-use crate::archive::{SerializedEntity, UpdateCommand};
+use crate::archive::{UpdateCommand};
 use crate::events::EventId;
 use crate::get_entity::get_entity;
 use crate::http_client::{create_client, get_json};

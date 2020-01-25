@@ -2,6 +2,7 @@ use serde::export::fmt::Error;
 use serde::export::Formatter;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
+use crate::stream_ext::Sequential;
 
 #[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EntityType {
@@ -119,6 +120,22 @@ impl NamespaceId {
         self.n
     }
 }
+
+#[derive(Debug, PartialEq)]
+pub struct SerializedEntity {
+    pub id: EntityId,
+    pub revision: RevisionId,
+    pub data: String,
+}
+
+impl Sequential for SerializedEntity {
+    type Marker = EntityId;
+
+    fn seq_marker(&self) -> Self::Marker {
+        self.id
+    }
+}
+
 
 #[cfg(test)]
 mod test {
