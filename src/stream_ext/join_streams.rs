@@ -120,9 +120,6 @@ mod test {
 
     use futures_test::*;
 
-    use crate::archive::SerializedEntity;
-    use crate::prelude::{EntityId, EntityType, RevisionId};
-
     use super::*;
 
     #[test]

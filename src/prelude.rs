@@ -1,8 +1,8 @@
+use crate::stream_ext::Sequential;
 use serde::export::fmt::Error;
 use serde::export::Formatter;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
-use crate::stream_ext::Sequential;
 
 #[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EntityType {
@@ -135,7 +135,6 @@ impl Sequential for SerializedEntity {
         self.id
     }
 }
-
 
 #[cfg(test)]
 mod test {
