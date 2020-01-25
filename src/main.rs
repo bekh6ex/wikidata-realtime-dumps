@@ -17,6 +17,9 @@ use crate::events::{get_current_event_id, update_command_stream, EventId};
 use crate::prelude::EntityType;
 use std::iter::FromIterator;
 use std::pin::Pin;
+use num_cpus;
+use crate::actor::arbiter_pool::ArbiterPool;
+use std::num::NonZeroUsize;
 
 mod actor;
 mod events;
@@ -26,6 +29,7 @@ mod init;
 mod prelude;
 mod stream_ext;
 mod warp_server;
+
 
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {
@@ -38,13 +42,8 @@ async fn main() -> std::io::Result<()> {
     let types = vec![EntityType::Item];
     //    let types = vec![EntityType::Lexeme, EntityType::Property, EntityType::Item];
 
-    let tuples = types.iter().map(|ty| {
-        let act = ArchivariusActor::new(*ty).start();
-        (*ty, act)
-    });
 
-    let map: BTreeMap<EntityType, Addr<ArchivariusActor>> = BTreeMap::from_iter(tuples);
-    let map = Arc::new(map);
+    let map: ArchivariusMap = start_actors(types);
 
     let ws = warp_server::start(&map);
 
@@ -88,6 +87,25 @@ async fn get_streams(
     });
 
     Box::pin(res)
+}
+
+type ArchivariusMap = Arc<BTreeMap<EntityType, Addr<ArchivariusActor>>>;
+
+fn start_actors(types: Vec<EntityType>) -> ArchivariusMap {
+    let cpu_number = num_cpus::get();
+
+    // Multiplying cores by X, because Volume actors a synchronous and block the thread.
+    // This way we can utilize cpu for 100% percent.
+    let actor_number = NonZeroUsize::new(cpu_number * 2).unwrap();
+    let arbiter_pool = ArbiterPool::new(actor_number);
+
+    let tuples = types.iter().map(move |ty| {
+        let act = ArchivariusActor::new(*ty, arbiter_pool.clone()).start();
+        (*ty, act)
+    });
+
+    let map: BTreeMap<EntityType, Addr<ArchivariusActor>> = BTreeMap::from_iter(tuples);
+    Arc::new(map)
 }
 
 async fn initialize(ty: EntityType, actor: Addr<ArchivariusActor>) -> EventId {

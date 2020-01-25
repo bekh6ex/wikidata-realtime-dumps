@@ -3,7 +3,7 @@ use std::ops::RangeInclusive;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
-use actix::{Actor, Addr, Arbiter, AsyncContext, Context, Handler, Message, MessageResult};
+use actix::{Actor, Addr, AsyncContext, Context, Handler, Message, MessageResult};
 use bytes::Bytes;
 use futures::stream::iter;
 use futures::StreamExt;
@@ -16,6 +16,7 @@ use crate::events::EventId;
 use crate::prelude::*;
 
 use super::volume;
+use crate::actor::arbiter_pool::ArbiterPool;
 
 mod tracker;
 
@@ -31,34 +32,33 @@ pub struct ArchivariusActor {
     closed_actors: Vec<(EntityRange, Addr<VolumeActor>)>,
     open_actor: Addr<VolumeActor>,
     last_id_to_open_actor: Option<EntityId>,
-    arbiters: Vec<Arbiter>,
+    arbiters: ArbiterPool,
     last_processed_event_id: Option<EventId>,
     // initialized_up_to - last EntityId of persisted actor
 }
 
 impl ArchivariusActor {
-    pub fn new(ty: EntityType) -> ArchivariusActor {
+    pub fn new(ty: EntityType, arbiters: ArbiterPool) -> ArchivariusActor {
         let store = ArchivariusStore::new(format!("/tmp/wd-rt-dumps/{:?}/archivarius.json", ty));
 
         let state = store.load().unwrap_or_default();
 
-        Self::new_initialized(ty, store, state)
+        Self::new_initialized(ty, store, state, arbiters)
     }
 
     fn new_initialized(
         ty: EntityType,
         store: ArchivariusStore<String>,
         state: StoredState,
+        arbiters: ArbiterPool,
     ) -> ArchivariusActor {
-        let arbiters = (0..ARBITERS).map(|_| Arbiter::new()).collect::<Vec<_>>();
 
         let closed_actors = state
             .closed
             .iter()
             .enumerate()
             .map(|(id, er)| {
-                let ar_idx = id % arbiters.len();
-                let vol = VolumeActor::start_in_arbiter(&arbiters[ar_idx], move |_| {
+                let vol = VolumeActor::start_in_arbiter(arbiters.next().as_ref(), move |_| {
                     volume::VolumeActor::persistent(ty, id as i32)
                 });
 
@@ -66,11 +66,10 @@ impl ArchivariusActor {
             })
             .collect::<Vec<_>>();
         let new_id = closed_actors.len();
-        let ar_idx = new_id % arbiters.len();
         let last_id_to_open_actor: Option<EntityId> = state.open_volume_last_entity_id;
         let initialized = state.initialized;
 
-        let open_actor = VolumeActor::start_in_arbiter(&arbiters[ar_idx], move |_| {
+        let open_actor = VolumeActor::start_in_arbiter(arbiters.next().as_ref(), move |_| {
             if initialized {
                 VolumeActor::persistent(ty, new_id as i32)
             } else {
@@ -137,13 +136,12 @@ impl ArchivariusActor {
     fn close_current_open_actor(&mut self) {
         let new_id = self.closed_actors.len() + 1;
 
-        let arbeiter_index = new_id % self.arbiters.len();
 
         let ty = self.ty;
         let initializing = self.initialization_in_progress();
 
         let new_open_actor =
-            VolumeActor::start_in_arbiter(&self.arbiters[arbeiter_index], move |_| {
+            VolumeActor::start_in_arbiter(self.arbiters.next().as_ref(), move |_| {
                 if initializing {
                     VolumeActor::in_memory(ty, new_id as i32)
                 } else {

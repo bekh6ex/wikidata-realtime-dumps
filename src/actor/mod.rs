@@ -9,6 +9,7 @@ use std::pin::Pin;
 
 pub mod archivarius;
 pub mod volume;
+pub mod arbiter_pool;
 
 pub struct GetDump;
 
