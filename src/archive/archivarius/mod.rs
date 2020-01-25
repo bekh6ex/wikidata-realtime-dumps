@@ -10,7 +10,7 @@ use futures::StreamExt;
 use log::*;
 use serde::{Deserialize, Serialize};
 
-use crate::archive::volume::{GetChunk, VolumeKeeper};
+use self::volume::{GetChunk, VolumeKeeper};
 use crate::archive::{GetDump, GetDumpResult, UnitFuture, UpdateChunkCommand, UpdateCommand};
 use crate::events::EventId;
 use crate::prelude::*;
@@ -18,7 +18,7 @@ use crate::prelude::*;
 use crate::archive::arbiter_pool::ArbiterPool;
 
 mod tracker;
-pub mod volume;
+mod volume;
 
 const ARBITERS: usize = 8;
 

@@ -1,5 +1,5 @@
 use super::prelude::*;
-use crate::archive::arbiter_pool::ArbiterPool;
+use self::arbiter_pool::ArbiterPool;
 use crate::events::EventId;
 use actix::prelude::*;
 use actix::{Addr, Message};
@@ -10,7 +10,6 @@ use std::iter::FromIterator;
 use std::num::NonZeroUsize;
 use std::pin::Pin;
 
-use self::archivarius::volume;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -18,7 +17,7 @@ pub(crate) use self::archivarius::{Archivarius, InitializationFinished, StartIni
 
 pub(crate) type ArchivariusMap = Arc<BTreeMap<EntityType, Addr<Archivarius>>>;
 
-pub mod arbiter_pool;
+mod arbiter_pool;
 mod archivarius;
 
 pub struct GetDump;

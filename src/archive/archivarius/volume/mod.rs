@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 mod keeper;
 mod storage;
 
-use crate::archive::volume::storage::Volume;
+use self::storage::Volume;
 use storage::VolumeStorage;
 
 pub struct VolumeKeeper {
