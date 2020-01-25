@@ -11,7 +11,7 @@ use futures::{self, StreamExt};
 use log::*;
 
 use self::archive::{start, ArchivariusMap};
-use crate::archive::archivarius::{Archivarius, InitializationFinished, StartInitialization};
+use crate::archive::{Archivarius, InitializationFinished, StartInitialization};
 use crate::archive::UpdateCommand;
 use crate::events::{get_current_event_id, update_command_stream, EventId};
 use crate::prelude::EntityType;

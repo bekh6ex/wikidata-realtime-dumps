@@ -9,7 +9,7 @@ use hyper::{Body, StatusCode};
 use warp::reply::Response;
 use warp::*;
 
-use crate::archive::archivarius::Archivarius;
+use crate::archive::Archivarius;
 use crate::archive::GetDump;
 use crate::prelude::EntityType;
 
