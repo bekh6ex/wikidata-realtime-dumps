@@ -1,4 +1,4 @@
-use super::SerializedEntity;
+use crate::actor::SerializedEntity;
 use crate::actor::UpdateChunkCommand;
 use actix::{Actor, Context, Handler, Message, MessageResult};
 use bytes::Bytes;

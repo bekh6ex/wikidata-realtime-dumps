@@ -7,8 +7,10 @@ use bytes::Bytes;
 use std::future::Future;
 use std::pin::Pin;
 
+use self::archivarius::volume;
+
+
 pub mod archivarius;
-pub mod volume;
 pub mod arbiter_pool;
 
 pub struct GetDump;

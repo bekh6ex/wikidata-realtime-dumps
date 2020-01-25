@@ -15,10 +15,10 @@ use crate::actor::{GetDump, GetDumpResult, UnitFuture, UpdateChunkCommand, Updat
 use crate::events::EventId;
 use crate::prelude::*;
 
-use super::volume;
 use crate::actor::arbiter_pool::ArbiterPool;
 
 mod tracker;
+pub mod volume;
 
 const ARBITERS: usize = 8;
 
