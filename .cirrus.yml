@@ -8,3 +8,12 @@ test_task:
   build_script: cargo build
   test_script: cargo test
   before_cache_script: rm -rf $CARGO_HOME/registry/index
+
+test_continuous_download:
+  cargo_cache:
+    folder: $CARGO_HOME/registry
+    fingerprint_script: cat continuous_download/Cargo.toml
+  cd_script: cd continuous_download
+  build_script: cargo build
+  test_script: cargo test
+  before_cache_script: rm -rf $CARGO_HOME/registry/index

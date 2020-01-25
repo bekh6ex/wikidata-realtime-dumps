@@ -1,0 +1,16 @@
+[package]
+name = "continuous-download"
+version = "0.1.0"
+authors = ["Aleksei Bekh-Ivanov <bekh6ex@users.noreply.github.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+futures = "0.3.1"
+futures-timer = "2.0.2"
+pin-utils = "0.1.0-alpha.4"
+log = "0.4.8"
+
+[dev-dependencies]
+async-std = {version="1.1.1", features=["attributes"]}

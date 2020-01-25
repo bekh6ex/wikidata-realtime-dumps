@@ -2,14 +2,10 @@ use core::task::{Context, Poll};
 use std::pin::Pin;
 use std::time::Duration;
 
-use actix::prelude::Stream;
 use futures::future::{ready, Ready};
-use futures::stream::once;
-use futures::StreamExt;
+use futures::stream::{once, Once, Chain, FilterMap, Flatten, Map};
 use futures::*;
 use futures_timer::Delay;
-use futures_util;
-use futures_util::stream::*;
 use log::*;
 use pin_utils::{unsafe_pinned, unsafe_unpinned};
 
@@ -29,11 +25,11 @@ pub struct ContinuousDownloadStream<St: Stream + 'static, Cr> {
 }
 
 impl<S, Cr, R, E> ContinuousDownloadStream<S, Cr>
-where
-    S: Stream<Item = Result<R, E>>,
-    R: AsRef<[u8]>,
-    Cr: FnMut(usize) -> S,
-    E: Debug,
+    where
+        S: Stream<Item = Result<R, E>>,
+        R: AsRef<[u8]>,
+        Cr: FnMut(usize) -> S, //TODO: Provide error as a second argument
+        E: Debug,
 {
     unsafe_pinned!(stream: DelayedStreamResult<S>);
     unsafe_pinned!(position: usize);
@@ -72,11 +68,11 @@ where
 }
 
 impl<S, Cr, R, E> Stream for ContinuousDownloadStream<S, Cr>
-where
-    S: Stream<Item = Result<R, E>>,
-    R: AsRef<[u8]>,
-    Cr: FnMut(usize) -> S,
-    E: Debug,
+    where
+        S: Stream<Item = Result<R, E>>,
+        R: AsRef<[u8]>,
+        Cr: FnMut(usize) -> S,
+        E: Debug,
 {
     type Item = Result<R, E>;
 
@@ -119,9 +115,10 @@ fn none<X>(_: ()) -> Option<X> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use futures::stream::iter;
 
     #[async_std::test]
-    async fn should_sort_two_out_of_order_with_buffer_1() {
+    async fn should_restart_and_continue_on_error() {
         let stream = ContinuousDownloadStream::new(
             |offset| {
                 if offset == 0 {
@@ -142,13 +139,5 @@ mod test {
         let results = stream.collect::<Vec<_>>().await;
 
         assert_eq!(results, vec![Ok("1"), Ok("2"), Ok("3"), Ok("4")]);
-
-        //        assert_stream_next!(stream, Ok("1"));
-        //        assert_stream_next!(stream, Ok("2"));
-        //        assert_stream_pending!(stream);
-        //        assert_stream_next!(stream, Ok("3"));
-        ////        assert_stream_pending!(stream);
-        ////        assert_stream_pending!(stream);
-        //        assert_stream_done!(stream);
     }
 }
