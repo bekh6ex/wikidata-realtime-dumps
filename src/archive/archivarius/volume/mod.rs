@@ -1,5 +1,5 @@
-use crate::archive::UpdateChunkCommand;
-use actix::{Actor, Context, Handler, Message, MessageResult, AsyncContext, SpawnHandle};
+use crate::archive::{UpdateChunkCommand, Archivarius};
+use actix::{Actor, Context, Handler, Message, MessageResult, AsyncContext, SpawnHandle, Addr};
 use bytes::Bytes;
 
 use log::*;
@@ -7,7 +7,7 @@ use log::*;
 use crate::prelude::{EntityId, EntityType, SerializedEntity};
 use storage::GzippedData;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 mod storage;
 
@@ -20,7 +20,8 @@ pub struct VolumeKeeper {
     i: i32,
     storage: Option<Volume>,
     command_buffer: Vec<UpdateChunkCommand>,
-    write_down_reminder: Option<SpawnHandle>
+    write_down_reminder: Option<SpawnHandle>,
+//    master: Addr<Archivarius>,
 }
 
 impl VolumeKeeper {
@@ -159,6 +160,10 @@ impl Handler<WriteDown> for VolumeKeeper {
         }
         let buffer = core::mem::replace(&mut self.command_buffer, vec![]);
 
+        let ids: BTreeSet<EntityId> = buffer.iter().map(|uc| uc.entity.id).collect();
+
         self.apply_changes(buffer);
+
+//        self.master.send()
     }
 }

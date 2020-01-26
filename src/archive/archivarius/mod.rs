@@ -389,6 +389,11 @@ impl<P: AsRef<Path>> ArchivariusStore<P> {
     }
 }
 
+struct VolumeKeeperReport {
+    keeper_id: i32,
+    work: Vec<(EventId, EntityId)>,
+}
+
 #[derive(Serialize, Deserialize)]
 struct StoredState {
     closed: Vec<EntityRange>,
