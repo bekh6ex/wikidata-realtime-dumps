@@ -1,5 +1,5 @@
-use super::prelude::*;
 use self::arbiter_pool::ArbiterPool;
+use super::prelude::*;
 use crate::events::EventId;
 use actix::prelude::*;
 use actix::{Addr, Message};

@@ -1,11 +1,10 @@
-use crate::archive::SerializedEntity;
 use crate::archive::UpdateChunkCommand;
 use actix::{Actor, Context, Handler, Message, MessageResult};
 use bytes::Bytes;
 
 use log::*;
 
-use crate::prelude::{EntityId, EntityType};
+use crate::prelude::{EntityId, EntityType, SerializedEntity};
 use storage::GzippedData;
 
 use std::collections::BTreeMap;
@@ -18,7 +17,7 @@ use storage::VolumeStorage;
 
 pub struct VolumeKeeper {
     i: i32,
-    storage: Option<Volume<String>>,
+    storage: Option<Volume>,
 }
 
 impl VolumeKeeper {

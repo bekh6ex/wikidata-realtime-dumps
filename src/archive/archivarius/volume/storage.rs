@@ -1,5 +1,6 @@
 use crate::prelude::*;
 use bytes::Bytes;
+use futures::io::ErrorKind;
 use log::*;
 use serde::export::fmt::{Debug, Error};
 use serde::export::Formatter;
@@ -16,17 +17,17 @@ pub trait VolumeStorage {
 }
 
 #[derive(Debug)]
-pub enum Volume<P: AsRef<Path> + Debug> {
+pub enum Volume {
     Open {
         storage: MemStorage,
         ty: EntityType,
-        path: P,
+        path: String,
     },
-    Closed(GzChunkStorage<P>),
+    Closed(GzChunkStorage),
 }
 
-impl<P: AsRef<Path> + Clone + Debug> Volume<P> {
-    pub(super) fn new_open(ty: EntityType, path: P) -> Self {
+impl Volume {
+    pub(super) fn new_open(ty: EntityType, path: String) -> Self {
         Volume::Open {
             storage: MemStorage::new(),
             ty,
@@ -34,7 +35,7 @@ impl<P: AsRef<Path> + Clone + Debug> Volume<P> {
         }
     }
 
-    pub(super) fn new_closed(ty: EntityType, path: P) -> Self {
+    pub(super) fn new_closed(ty: EntityType, path: String) -> Self {
         Volume::Closed(GzChunkStorage::new(ty, path))
     }
 
@@ -57,7 +58,7 @@ impl<P: AsRef<Path> + Clone + Debug> Volume<P> {
     }
 }
 
-impl<P: AsRef<Path> + Debug> VolumeStorage for Volume<P> {
+impl VolumeStorage for Volume {
     fn load(&self) -> GzippedData {
         match &self {
             Volume::Open { storage, .. } => storage.load(),
@@ -130,18 +131,21 @@ impl VolumeStorage for MemStorage {
 }
 
 #[derive(Debug)]
-pub struct GzChunkStorage<P: AsRef<Path>> {
+pub struct GzChunkStorage {
     ty: EntityType,
-    path: P,
+    path: String,
 }
 
-impl<P: AsRef<Path>> GzChunkStorage<P> {
-    pub(super) fn new(ty: EntityType, path: P) -> Self {
+impl GzChunkStorage {
+    pub(super) fn new(ty: EntityType, path: String) -> Self {
         GzChunkStorage { ty, path }
     }
 
-    pub(super) fn new_initialized(ty: EntityType, path: P, data: GzippedData) -> Self {
-        let s = GzChunkStorage { ty, path };
+    pub(super) fn new_initialized(ty: EntityType, path: String, data: GzippedData) -> Self {
+        let s = GzChunkStorage {
+            ty,
+            path: path.into(),
+        };
         s.store(data);
         s
     }
@@ -150,57 +154,63 @@ impl<P: AsRef<Path>> GzChunkStorage<P> {
         self.path.as_ref()
     }
 
+    fn tmp_file_path(&self) -> impl AsRef<Path> {
+        let x: &Path = self.path.as_ref();
+        let x1: &'static str = "tmp.gz";
+        x.with_extension(x1)
+    }
+
     pub fn load(&self) -> GzippedData {
         use std::fs;
 
         let file_path = self.file_path();
-        let file_path1 = self.file_path();
 
-        {
-            trace!("Reading a file '{}'", file_path.to_str().unwrap());
+        trace!("Reading a file '{}'", file_path.display());
 
-            let read_result: io::Result<_> = fs::read(file_path);
+        let read_result: io::Result<_> = fs::read(file_path);
 
-            if read_result.is_err() {
-                // TODO Match the error
-                // Custom { kind: NotFound, error: VerboseError { source: Os { code: 2, kind: NotFound, message: "No such file or directory" }, message: "could not read file `/tmp/wd-rt-dumps/chunk/933.gz`" } }
-                info!(
-                    "Failed to read a file '{}'. Might be just missing. Error: {:?}",
-                    file_path1.to_str().unwrap(),
-                    read_result.unwrap_err()
-                );
-                GzippedData::compress("")
-            } else {
-                GzippedData::from_binary(read_result.unwrap())
-            }
+        match read_result {
+            Ok(data) => GzippedData::from_binary(data),
+            Err(err) => match err.kind() {
+                ErrorKind::NotFound => GzippedData::compress(""),
+                _ => panic!("Failed to read file '{}': {:?}", file_path.display(), err),
+            },
         }
     }
 
     fn store(&self, data: GzippedData) {
         use std::fs;
+
         let dir_path = self
-            .path
-            .as_ref()
+            .file_path()
             .parent()
             .expect("Expected file with parent");
 
         {
-            trace!(
-                "Writing a file '{:?}' len={}",
-                self.path.as_ref(),
-                data.len()
-            );
-            fs::create_dir_all(dir_path)
-                .unwrap_or_else(|_| panic!("Failed to create directory '{:?}'", dir_path));
-            // TODO: Maybe use sync_all() here?
-            // TODO: Write to tmp file and them move, to reduce the risk of having broken file
-            fs::write(self.path.as_ref(), data)
-                .unwrap_or_else(|_| panic!("Writing to file '{:?}' failed", self.path.as_ref()));
+            trace!("Writing a file '{:?}' len={}", self.file_path(), data.len());
+            fs::create_dir_all(&dir_path)
+                .unwrap_or_else(|_| panic!("Failed to create directory '{:?}'", &dir_path));
+            fs::write(self.tmp_file_path(), data).unwrap_or_else(|e| {
+                panic!(
+                    "Writing file '{}' failed: {:?}",
+                    self.tmp_file_path().as_ref().display(),
+                    e
+                )
+            });
+
+            fs::rename(self.tmp_file_path(), self.file_path()).unwrap_or_else(|e| {
+                panic!(
+                    "Failed to move tmp file '{}' to '{}': {:?}",
+                    self.tmp_file_path().as_ref().display(),
+                    self.file_path().display(),
+                    e
+                )
+            })
         }
     }
 }
 
-impl<P: AsRef<Path>> VolumeStorage for GzChunkStorage<P> {
+impl VolumeStorage for GzChunkStorage {
     fn load(&self) -> GzippedData {
         self.load()
     }
@@ -224,7 +234,7 @@ impl GzippedData {
         use flate2::write::GzEncoder;
         use flate2::Compression;
         use std::io::Write;
-        let mut encoder = GzEncoder::new(Vec::with_capacity(data.len() / 3), Compression::best());
+        let mut encoder = GzEncoder::new(Vec::with_capacity(data.len() / 5), Compression::best());
         encoder.write_all(data.as_bytes()).unwrap();
 
         GzippedData {
@@ -237,7 +247,7 @@ impl GzippedData {
         use std::io::Read;
 
         let mut d = GzDecoder::new(&self.inner[..]);
-        let mut s = String::with_capacity(self.inner.len() * 3);
+        let mut s = String::with_capacity(self.inner.len() * 5);
         d.read_to_string(&mut s).expect("Incorrect GZip format");
         s
     }

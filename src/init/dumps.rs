@@ -12,11 +12,11 @@ use serde::Deserialize;
 use crate::http_client::create_client;
 use crate::prelude::*;
 use continuous_download::ContinuousDownloadStream;
-use sorted_stream::BufferedSortedStream;
 use hyper::body::Bytes;
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper_rustls::HttpsConnector;
+use sorted_stream::BufferedSortedStream;
 
 pub(super) async fn get_dump_stream(ty: EntityType) -> impl Stream<Item = SerializedEntity> {
     let stream = json_stream().await;

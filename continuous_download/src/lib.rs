@@ -3,7 +3,7 @@ use std::pin::Pin;
 use std::time::Duration;
 
 use futures::future::{ready, Ready};
-use futures::stream::{once, Once, Chain, FilterMap, Flatten, Map};
+use futures::stream::{once, Chain, FilterMap, Flatten, Map, Once};
 use futures::*;
 use futures_timer::Delay;
 use log::*;
@@ -28,11 +28,11 @@ pub struct ContinuousDownloadStream<St: Stream + 'static, Cr> {
 //       Instead, failure number can be provided.
 
 impl<S, Cr, R, E> ContinuousDownloadStream<S, Cr>
-    where
-        S: Stream<Item = Result<R, E>>,
-        R: AsRef<[u8]>,
-        Cr: FnMut(usize) -> S, //TODO: Provide error as a second argument
-        E: Debug,
+where
+    S: Stream<Item = Result<R, E>>,
+    R: AsRef<[u8]>,
+    Cr: FnMut(usize) -> S, //TODO: Provide error as a second argument
+    E: Debug,
 {
     unsafe_pinned!(stream: DelayedStreamResult<S>);
     unsafe_pinned!(position: usize);
@@ -71,11 +71,11 @@ impl<S, Cr, R, E> ContinuousDownloadStream<S, Cr>
 }
 
 impl<S, Cr, R, E> Stream for ContinuousDownloadStream<S, Cr>
-    where
-        S: Stream<Item = Result<R, E>>,
-        R: AsRef<[u8]>,
-        Cr: FnMut(usize) -> S,
-        E: Debug,
+where
+    S: Stream<Item = Result<R, E>>,
+    R: AsRef<[u8]>,
+    Cr: FnMut(usize) -> S,
+    E: Debug,
 {
     type Item = Result<R, E>;
 
