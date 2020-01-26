@@ -16,11 +16,15 @@ use storage::VolumeStorage;
 use std::borrow::BorrowMut;
 use std::time::Duration;
 
+const MAX_CHUNK_SIZE: usize = 22 * 1024 * 1024;
+
 pub struct VolumeKeeper {
     i: i32,
     storage: Option<Volume>,
     command_buffer: Vec<UpdateChunkCommand>,
     write_down_reminder: Option<SpawnHandle>,
+//    range_start: EntityId,
+//    range_end: Option<EntityId>,
 //    master: Addr<Archivarius>,
 }
 
@@ -79,6 +83,15 @@ impl VolumeKeeper {
         })
     }
 
+//    fn in_the_range(&self, id: EntityId) -> bool {
+//        match self.range_end {
+//            None => id >= self.range_start,
+//            Some(range_end) => id >= self.range_start && id <= range_end,
+//        }
+//    }
+
+    fn finish_the_volume(){}
+
     fn remind_to_write_down(&mut self, ctx: &mut Context<Self>) {
         match self.write_down_reminder.take() {
             Some(handle) => {ctx.cancel_future(handle);},
@@ -94,6 +107,9 @@ impl Handler<UpdateChunkCommand> for VolumeKeeper {
     type Result = MessageResult<UpdateChunkCommand>;
 
     fn handle(&mut self, msg: UpdateChunkCommand, ctx: &mut Self::Context) -> Self::Result {
+//        if !self.in_the_range(msg.entity.id) {
+//            self.master.do_send(Redeliver(msg))
+//        }
         debug!(
             "UpdateCommand[actor_id={}]: entity_id={}",
             self.i, msg.entity.id
