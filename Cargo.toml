@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["Aleksey Bekh-Ivanov <6ex@mail.ru>"]
 edition = "2018"
 
+[workspace]
+members = ["continuous_download", "sorted_stream"]
+
 [profile.dev]
 panic = 'abort'
 [profile.release]
