@@ -1,5 +1,5 @@
 use crate::archive::UpdateChunkCommand;
-use actix::{Actor, Context, Handler, Message, MessageResult};
+use actix::{Actor, Context, Handler, Message, MessageResult, AsyncContext, SpawnHandle};
 use bytes::Bytes;
 
 use log::*;
@@ -9,15 +9,18 @@ use storage::GzippedData;
 
 use std::collections::BTreeMap;
 
-mod keeper;
 mod storage;
 
 use self::storage::Volume;
 use storage::VolumeStorage;
+use std::borrow::BorrowMut;
+use std::time::Duration;
 
 pub struct VolumeKeeper {
     i: i32,
     storage: Option<Volume>,
+    command_buffer: Vec<UpdateChunkCommand>,
+    write_down_reminder: Option<SpawnHandle>
 }
 
 impl VolumeKeeper {
@@ -28,6 +31,8 @@ impl VolumeKeeper {
                 ty,
                 format!("/tmp/wd-rt-dumps/{:?}/{}.gz", ty, i),
             )),
+            command_buffer: vec![],
+            write_down_reminder: None,
         }
     }
 
@@ -38,6 +43,8 @@ impl VolumeKeeper {
                 ty,
                 format!("/tmp/wd-rt-dumps/{:?}/{}.gz", ty, i),
             )),
+            command_buffer: vec![],
+            write_down_reminder: None,
         }
     }
 
@@ -50,26 +57,16 @@ impl VolumeKeeper {
         let storage = self.storage.take().unwrap();
         self.storage = Some(storage.close());
     }
-}
 
-impl Handler<UpdateChunkCommand> for VolumeKeeper {
-    type Result = MessageResult<UpdateChunkCommand>;
+    fn storage(&mut self) -> &mut Volume {
+        self.storage.as_mut().unwrap()
+    }
 
-    fn handle(&mut self, msg: UpdateChunkCommand, _ctx: &mut Self::Context) -> Self::Result {
-        let thread = {
-            let thread1 = std::thread::current();
-            thread1.name().unwrap_or("<unknown>").to_owned()
-        };
+    fn apply_changes(&mut self, commands: Vec<UpdateChunkCommand>) -> usize {
+        self.storage().change(move |entities: &mut BTreeMap<EntityId, SerializedEntity>| {
+            for msg in commands {
+                let new = msg.entity;
 
-        debug!(
-            "thread={} UpdateCommand[actor_id={}]: entity_id={}",
-            thread, self.i, msg.entity.id
-        );
-
-        let new = msg.entity;
-
-        let new_raw_size = self.storage.as_mut().unwrap().change(
-            move |entities: &mut BTreeMap<EntityId, SerializedEntity>| {
                 if entities.contains_key(&new.id) {
                     entities.remove(&new.id);
                     // TODO: Check revision
@@ -77,8 +74,35 @@ impl Handler<UpdateChunkCommand> for VolumeKeeper {
                 } else {
                     entities.insert(new.id, new);
                 }
-            },
+            }
+        })
+    }
+
+    fn remind_to_write_down(&mut self, ctx: &mut Context<Self>) {
+        match self.write_down_reminder.take() {
+            Some(handle) => {ctx.cancel_future(handle);},
+            None => ()
+        };
+
+        let handle = ctx.notify_later(WriteDown, Duration::from_secs(10));
+        self.write_down_reminder.replace(handle);
+    }
+}
+
+impl Handler<UpdateChunkCommand> for VolumeKeeper {
+    type Result = MessageResult<UpdateChunkCommand>;
+
+    fn handle(&mut self, msg: UpdateChunkCommand, ctx: &mut Self::Context) -> Self::Result {
+        debug!(
+            "UpdateCommand[actor_id={}]: entity_id={}",
+            self.i, msg.entity.id
         );
+
+//        self.command_buffer.push(msg.clone());
+
+        let new_raw_size = self.apply_changes(vec![msg]);
+
+        self.remind_to_write_down(ctx);
 
         MessageResult(new_raw_size)
     }
@@ -94,9 +118,7 @@ impl Handler<GetChunk> for VolumeKeeper {
     type Result = MessageResult<GetChunk>;
 
     fn handle(&mut self, _msg: GetChunk, _ctx: &mut Self::Context) -> Self::Result {
-        let thread1 = std::thread::current();
-        let thread = thread1.name().unwrap_or("<unknown>").to_owned();
-        debug!("thread={} Get chunk: i={}", thread, self.i);
+        debug!("Get chunk: i={}", self.i);
         let res = self.load().into_bytes();
         MessageResult(res)
     }
@@ -118,5 +140,25 @@ impl Handler<Persist> for VolumeKeeper {
     fn handle(&mut self, _msg: Persist, _ctx: &mut Self::Context) -> Self::Result {
         self.close_storage();
         MessageResult(())
+    }
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+struct WriteDown;
+
+impl Handler<WriteDown> for VolumeKeeper {
+    type Result = ();
+
+    fn handle(&mut self, msg: WriteDown, ctx: &mut Self::Context) -> Self::Result {
+        info!("VolumeKeeper({}): Writing down the results", self.i);
+        if self.command_buffer.is_empty() {
+            info!("VolumeKeeper({}): Nothing to write down", self.i);
+
+            return;
+        }
+        let buffer = core::mem::replace(&mut self.command_buffer, vec![]);
+
+        self.apply_changes(buffer);
     }
 }

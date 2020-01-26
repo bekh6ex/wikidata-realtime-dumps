@@ -106,7 +106,7 @@ impl Display for EntityId {
     }
 }
 
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct RevisionId(pub u64);
 
 #[derive(Debug)]
@@ -121,7 +121,7 @@ impl NamespaceId {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct SerializedEntity {
     pub id: EntityId,
     pub revision: RevisionId,

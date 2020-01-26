@@ -41,6 +41,7 @@ impl Message for UpdateCommand {
 
 pub type UnitFuture = Pin<Box<dyn Future<Output = ()> + Send + Sync>>;
 
+#[derive(Clone)]
 pub struct UpdateChunkCommand {
     pub entity: SerializedEntity,
 }
