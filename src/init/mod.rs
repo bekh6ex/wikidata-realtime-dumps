@@ -5,8 +5,8 @@ use futures::stream::{iter, StreamExt};
 use futures::Stream;
 use log::*;
 use serde::Deserialize;
+
 use warp::Future;
-use std::num::NonZeroUsize;
 
 use crate::archive::UpdateCommand;
 use crate::events::EventId;
@@ -16,7 +16,7 @@ use crate::init::dumps::get_dump_stream;
 use crate::prelude::*;
 use crate::stream_ext::join_streams::JoinStreams;
 use std::pin::Pin;
-use stream_throttle::ThrottleRate;
+
 
 mod dumps;
 
@@ -63,9 +63,8 @@ pub async fn init(
             // To not make a lot of requests in the same time
             let timeout = id.n() % 50;
             let client = client.clone();
-            async_std::task::sleep(Duration::from_millis(timeout as u64)).then(move |_| {
-                client.get_entity(id)
-            })
+            async_std::task::sleep(Duration::from_millis(timeout as u64))
+                .then(move |_| client.get_entity(id))
         })
         .map(pin);
         fn pin(

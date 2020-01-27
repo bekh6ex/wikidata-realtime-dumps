@@ -1,4 +1,4 @@
-use std::sync::Arc;
+
 use std::time::Duration;
 
 use futures::future::ready;
@@ -10,7 +10,7 @@ use sse_codec::Event;
 
 use crate::archive::UpdateCommand;
 use crate::get_entity::GetEntityClient;
-use crate::http_client::create_client;
+
 
 use super::prelude::*;
 use crate::events::event_stream::response_to_stream;
@@ -102,10 +102,7 @@ pub async fn update_command_stream(
             async move {
                 // TODO: Handle new and deleted
                 let entity = client.get_entity(id).await?;
-                Some(UpdateCommand {
-                    event_id,
-                    entity,
-                })
+                Some(UpdateCommand { event_id, entity })
             }
         })
         .enumerate()

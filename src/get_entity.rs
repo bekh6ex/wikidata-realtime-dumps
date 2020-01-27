@@ -1,15 +1,11 @@
 use std::future::Future;
-use std::pin::Pin;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::time::Duration;
 use std::num::NonZeroUsize;
+use std::pin::Pin;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 
 use futures::*;
-use hyper::{Body, Client as HyperClient};
-use hyper::client::connect::dns::GaiResolver;
-use hyper::client::HttpConnector;
-use hyper_rustls::HttpsConnector;
 use log::*;
 use rand;
 use rand::Rng;
@@ -17,10 +13,8 @@ use serde::Deserialize;
 use serde_json::Value;
 use stream_throttle::{ThrottlePool, ThrottleRate};
 
-use crate::http_client::{create_client, Error, get_json};
+use crate::http_client::{create_client, get_json, Error, Client};
 use crate::prelude::*;
-
-type Client = HyperClient<HttpsConnector<HttpConnector<GaiResolver>>, Body>;
 
 #[derive(Clone)]
 pub struct GetEntityClient {
@@ -31,7 +25,9 @@ pub struct GetEntityClient {
 
 impl GetEntityClient {
     pub fn new(pool_size: NonZeroUsize, rate: ThrottleRate) -> Self {
-        let client_pool: Vec<_> = (0..pool_size.get()).map(|_| Arc::new(create_client())).collect();
+        let client_pool: Vec<_> = (0..pool_size.get())
+            .map(|_| Arc::new(create_client()))
+            .collect();
         GetEntityClient {
             client_pool: client_pool,
             pool_index: Arc::new(AtomicUsize::new(0)),
@@ -42,7 +38,8 @@ impl GetEntityClient {
     pub fn get_entity(&self, id: EntityId) -> impl Future<Output = Option<SerializedEntity>> {
         let eventual_response = self.clone().with_retries(id, 1);
         eventual_response.map(|r| {
-            r.expect("Failed to get an entity").map(GetEntityResult::into_serialized_entity)
+            r.expect("Failed to get an entity")
+                .map(GetEntityResult::into_serialized_entity)
         })
     }
 
@@ -55,7 +52,7 @@ impl GetEntityClient {
         self,
         id: EntityId,
         try_number: u8,
-    ) -> Pin<Box<dyn Future<Output=Result<Option<GetEntityResult>, Error>>>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Option<GetEntityResult>, Error>>>> {
         Box::pin(async move {
             debug!("Getting an entity {}. timeout={:?}", id, TIMEOUT);
 
@@ -97,11 +94,7 @@ impl GetEntityClient {
         })
     }
 
-
-    async fn get_entity_internal(
-        self,
-        id: EntityId,
-    ) -> Result<Option<GetEntityResult>, Error> {
+    async fn get_entity_internal(self, id: EntityId) -> Result<Option<GetEntityResult>, Error> {
         futures::compat::Compat01As03::new(self.rate_pool.queue())
             .map_err(|_| Error::Throttled)
             .await?;
@@ -112,14 +105,12 @@ impl GetEntityClient {
         );
         println!("Get entity {:?};", id);
 
-
         let response = get_json::<SpecialEntityResponse>(self.client(), url).await?;
         if response.is_none() {
             return Ok(None);
         }
         let response = response.unwrap();
         println!("Get entity response {:?};", id);
-
 
         // Entity might be a redirect to another one which will be automatically resolved.
         // The response will then contains some other entity which should be ignored.
@@ -171,7 +162,6 @@ fn change_timeout(factor: f32) -> u64 {
     timeout as u64
 }
 
-
 fn extract_revision_id(id: EntityId, value: &Value) -> u64 {
     value
         .as_object()
@@ -212,41 +202,45 @@ mod test {
     use std::sync::Arc;
     use std::time::Duration;
 
-    use futures::*;
     use futures::stream::*;
     use stream_throttle::ThrottleRate;
 
     use crate::get_entity::GetEntityClient;
-    use crate::prelude::{EntityId, EntityType};
+    use crate::prelude::{EntityType};
 
     #[actix_rt::test]
     async fn test_rate() {
         init_logger();
 
-        let client = Arc::new(GetEntityClient::new(NonZeroUsize::new(4).unwrap(), ThrottleRate::new(2000, Duration::from_secs(1))));
+        let client = Arc::new(GetEntityClient::new(
+            NonZeroUsize::new(4).unwrap(),
+            ThrottleRate::new(2000, Duration::from_secs(1)),
+        ));
 
         iter(1..1)
             .map(|i| EntityType::Item.id(i))
             .map(move |id| {
                 let client = client.clone();
-                async move {
-                    client.get_entity(id).await
-                }
+                async move { client.get_entity(id).await }
             })
             .buffered(2000)
-            .for_each_concurrent(100, |e| async {
-                async_std::task::spawn(async move {
-                    e.map(|e| println!("Got {:?}", e.id));
-                }).await;
-                //do nothing
-            }).await;
+            .for_each_concurrent(100, |e| {
+                async {
+                    async_std::task::spawn(async move {
+                        e.map(|e| println!("Got {:?}", e.id));
+                    })
+                    .await;
+                    //do nothing
+                }
+            })
+            .await;
     }
 
     fn init_logger() {
         use log::LevelFilter;
         use log4rs::append::console::ConsoleAppender;
         use log4rs::config::{Appender, Root};
-        use log4rs::encode::json::JsonEncoder;
+
 
         let stdout: ConsoleAppender = ConsoleAppender::builder().build();
         let log_config = log4rs::config::Config::builder()

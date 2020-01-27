@@ -9,7 +9,7 @@ use log::*;
 
 use serde::de::Deserialize;
 
-type Client = HyperClient<HttpsConnector<HttpConnector<GaiResolver>>, Body>;
+pub type Client = HyperClient<HttpsConnector<HttpConnector<GaiResolver>>, Body>;
 
 pub fn create_client() -> Client {
     HyperClient::builder().build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new())

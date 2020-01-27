@@ -1,5 +1,5 @@
-use crate::archive::{UpdateChunkCommand, Archivarius};
-use actix::{Actor, Context, Handler, Message, MessageResult, AsyncContext, SpawnHandle, Addr};
+use crate::archive::{UpdateChunkCommand};
+use actix::{Actor, AsyncContext, Context, Handler, Message, MessageResult, SpawnHandle};
 use bytes::Bytes;
 
 use log::*;
@@ -12,9 +12,9 @@ use std::collections::{BTreeMap, BTreeSet};
 mod storage;
 
 use self::storage::Volume;
-use storage::VolumeStorage;
-use std::borrow::BorrowMut;
+
 use std::time::Duration;
+use storage::VolumeStorage;
 
 const MAX_CHUNK_SIZE: usize = 22 * 1024 * 1024;
 
@@ -23,9 +23,9 @@ pub struct VolumeKeeper {
     storage: Option<Volume>,
     command_buffer: Vec<UpdateChunkCommand>,
     write_down_reminder: Option<SpawnHandle>,
-//    range_start: EntityId,
-//    range_end: Option<EntityId>,
-//    master: Addr<Archivarius>,
+    //    range_start: EntityId,
+    //    range_end: Option<EntityId>,
+    //    master: Addr<Archivarius>,
 }
 
 impl VolumeKeeper {
@@ -68,34 +68,37 @@ impl VolumeKeeper {
     }
 
     fn apply_changes(&mut self, commands: Vec<UpdateChunkCommand>) -> usize {
-        self.storage().change(move |entities: &mut BTreeMap<EntityId, SerializedEntity>| {
-            for msg in commands {
-                let new = msg.entity;
+        self.storage()
+            .change(move |entities: &mut BTreeMap<EntityId, SerializedEntity>| {
+                for msg in commands {
+                    let new = msg.entity;
 
-                if entities.contains_key(&new.id) {
-                    entities.remove(&new.id);
-                    // TODO: Check revision
-                    entities.insert(new.id, new);
-                } else {
-                    entities.insert(new.id, new);
+                    if entities.contains_key(&new.id) {
+                        entities.remove(&new.id);
+                        // TODO: Check revision
+                        entities.insert(new.id, new);
+                    } else {
+                        entities.insert(new.id, new);
+                    }
                 }
-            }
-        })
+            })
     }
 
-//    fn in_the_range(&self, id: EntityId) -> bool {
-//        match self.range_end {
-//            None => id >= self.range_start,
-//            Some(range_end) => id >= self.range_start && id <= range_end,
-//        }
-//    }
+    //    fn in_the_range(&self, id: EntityId) -> bool {
+    //        match self.range_end {
+    //            None => id >= self.range_start,
+    //            Some(range_end) => id >= self.range_start && id <= range_end,
+    //        }
+    //    }
 
-    fn finish_the_volume(){}
+    fn finish_the_volume() {}
 
     fn remind_to_write_down(&mut self, ctx: &mut Context<Self>) {
         match self.write_down_reminder.take() {
-            Some(handle) => {ctx.cancel_future(handle);},
-            None => ()
+            Some(handle) => {
+                ctx.cancel_future(handle);
+            }
+            None => (),
         };
 
         let handle = ctx.notify_later(WriteDown, Duration::from_secs(10));
@@ -107,15 +110,15 @@ impl Handler<UpdateChunkCommand> for VolumeKeeper {
     type Result = MessageResult<UpdateChunkCommand>;
 
     fn handle(&mut self, msg: UpdateChunkCommand, ctx: &mut Self::Context) -> Self::Result {
-//        if !self.in_the_range(msg.entity.id) {
-//            self.master.do_send(Redeliver(msg))
-//        }
+        //        if !self.in_the_range(msg.entity.id) {
+        //            self.master.do_send(Redeliver(msg))
+        //        }
         debug!(
             "UpdateCommand[actor_id={}]: entity_id={}",
             self.i, msg.entity.id
         );
 
-//        self.command_buffer.push(msg.clone());
+        //        self.command_buffer.push(msg.clone());
 
         let new_raw_size = self.apply_changes(vec![msg]);
 
@@ -124,12 +127,9 @@ impl Handler<UpdateChunkCommand> for VolumeKeeper {
         MessageResult(new_raw_size)
     }
 }
-
+#[derive(Message)]
+#[rtype(result = "Bytes")]
 pub(super) struct GetChunk;
-
-impl Message for GetChunk {
-    type Result = Bytes;
-}
 
 impl Handler<GetChunk> for VolumeKeeper {
     type Result = MessageResult<GetChunk>;
@@ -145,11 +145,9 @@ impl Actor for VolumeKeeper {
     type Context = Context<Self>;
 }
 
+#[derive(Message)]
+#[rtype(result = "()")]
 pub struct Persist;
-
-impl Message for Persist {
-    type Result = ();
-}
 
 impl Handler<Persist> for VolumeKeeper {
     type Result = MessageResult<Persist>;
@@ -167,7 +165,7 @@ struct WriteDown;
 impl Handler<WriteDown> for VolumeKeeper {
     type Result = ();
 
-    fn handle(&mut self, msg: WriteDown, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, _msg: WriteDown, _ctx: &mut Self::Context) -> Self::Result {
         info!("VolumeKeeper({}): Writing down the results", self.i);
         if self.command_buffer.is_empty() {
             info!("VolumeKeeper({}): Nothing to write down", self.i);
@@ -176,10 +174,10 @@ impl Handler<WriteDown> for VolumeKeeper {
         }
         let buffer = core::mem::replace(&mut self.command_buffer, vec![]);
 
-        let ids: BTreeSet<EntityId> = buffer.iter().map(|uc| uc.entity.id).collect();
+        let _ids: BTreeSet<EntityId> = buffer.iter().map(|uc| uc.entity.id).collect();
 
         self.apply_changes(buffer);
 
-//        self.master.send()
+        //        self.master.send(report)
     }
 }
