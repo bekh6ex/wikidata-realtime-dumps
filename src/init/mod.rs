@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::time::Duration;
 
 use futures::future::{ready, FutureExt};
@@ -7,15 +6,17 @@ use futures::Stream;
 use log::*;
 use serde::Deserialize;
 use warp::Future;
+use std::num::NonZeroUsize;
 
 use crate::archive::UpdateCommand;
 use crate::events::EventId;
-use crate::get_entity::get_entity;
+use crate::get_entity::GetEntityClient;
 use crate::http_client::{create_client, get_json};
 use crate::init::dumps::get_dump_stream;
 use crate::prelude::*;
 use crate::stream_ext::join_streams::JoinStreams;
 use std::pin::Pin;
+use stream_throttle::ThrottleRate;
 
 mod dumps;
 
@@ -30,12 +31,7 @@ pub async fn init(
     let min = start_id.map(|i| i.n()).unwrap_or(1);
     let max = latest_id.n() + safety_offset;
 
-    const MAX_CLIENTS: u32 = 2;
-    let client_pool = Arc::new(
-        (0..MAX_CLIENTS)
-            .map(|_| create_client())
-            .collect::<Vec<_>>(),
-    );
+    let client = GetEntityClient::default();
 
     debug!("Creating init stream for {:?}", ty);
 
@@ -61,15 +57,14 @@ pub async fn init(
     let stream: ThisStream = {
         let id_stream = id_stream(min, max, ty);
         let dump_stream = get_dump_stream(ty).await;
-        let client_pool = client_pool.clone();
+        let client = client.clone();
 
         let joined = JoinStreams::new(id_stream, dump_stream, move |id: EntityId| {
-            let pool_index = id.n() as usize % client_pool.len();
-            let client = Arc::new(client_pool[pool_index].clone());
             // To not make a lot of requests in the same time
             let timeout = id.n() % 50;
+            let client = client.clone();
             async_std::task::sleep(Duration::from_millis(timeout as u64)).then(move |_| {
-                get_entity(client, id).map(|option| option.map(|e| e.into_serialized_entity()))
+                client.get_entity(id)
             })
         })
         .map(pin);

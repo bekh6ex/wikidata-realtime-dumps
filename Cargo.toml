@@ -18,7 +18,7 @@ panic = 'abort'
 [dependencies]
 actix="0.9.0"
 actix-rt = "1.0.0"
-futures = "0.3.1"
+futures = { version="0.3.1", features=["compat"] }
 bytes = "0.5.3"
 sse-codec = {version="0.1.0", git="https://github.com/bekh6ex/sse-codec.git", branch="fix-stream-bug"}
 serde = {version="1.0.104", features=["serde_derive"]}
@@ -43,6 +43,7 @@ futures-timer = "2.0.2"
 num_cpus = "1.12.0"
 continuous_download = { path="continuous_download"}
 sorted_stream = { path="sorted_stream"}
+stream_throttle = "0.2.1"
 
 [dev-dependencies]
 futures-test = "0.3.1"

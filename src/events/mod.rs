@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use sse_codec::Event;
 
 use crate::archive::UpdateCommand;
-use crate::get_entity::get_entity;
+use crate::get_entity::GetEntityClient;
 use crate::http_client::create_client;
 
 use super::prelude::*;
@@ -80,7 +80,7 @@ pub async fn update_command_stream(
     ty: EntityType,
     event_id: EventId,
 ) -> impl Stream<Item = UpdateCommand> {
-    let client_for_entities = Arc::new(create_client());
+    let client_for_entities = GetEntityClient::default();
 
     get_proper_event_stream(Some(event_id))
         .await
@@ -101,10 +101,10 @@ pub async fn update_command_stream(
             let id = ty.parse_from_title(&title).unwrap();
             async move {
                 // TODO: Handle new and deleted
-                let entity_result = get_entity(client, id).await?;
+                let entity = client.get_entity(id).await?;
                 Some(UpdateCommand {
                     event_id,
-                    entity: entity_result.into_serialized_entity(),
+                    entity,
                 })
             }
         })
