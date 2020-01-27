@@ -1,15 +1,12 @@
 use std::future::Future;
 use std::num::NonZeroUsize;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use backoff_futures::BackoffExt;
 use futures::*;
 use log::*;
-use rand;
-use rand::Rng;
 use serde::Deserialize;
 use serde_json::Value;
 use stream_throttle::{ThrottlePool, ThrottleRate};
@@ -37,7 +34,6 @@ impl GetEntityClient {
     }
 
     pub fn get_entity(&self, id: EntityId) -> impl Future<Output = Option<SerializedEntity>> {
-        use backoff_futures::BackoffExt;
         let this = self.clone();
 
         let get_this_entity = move || {
@@ -45,7 +41,6 @@ impl GetEntityClient {
         };
 
         async move {
-//            let mut backoff = backoff::ExponentialBackoff::default();
             let mut backoff = backoff::ExponentialBackoff{
                 initial_interval: Duration::from_millis(5),
                 max_interval: Duration::from_secs(5),
@@ -67,52 +62,6 @@ impl GetEntityClient {
         &self.client_pool[index % self.client_pool.len()]
     }
 
-    fn with_retries(
-        self,
-        id: EntityId,
-        try_number: u8,
-    ) -> Pin<Box<dyn Future<Output = Result<Option<GetEntityResult>, Error>>>> {
-        Box::pin(async move {
-            debug!("Getting an entity {}. timeout={:?}", id, TIMEOUT);
-
-            let r = self.clone().get_entity_internal(id).await;
-            use rand::SeedableRng;
-            let fuzzy = rand::rngs::SmallRng::from_entropy().gen_range(0.9f32, 1.1f32);
-
-            use Error::*;
-            match r {
-                Ok(result) => {
-                    change_timeout(TIMEOUT_REDUCE);
-                    Ok(result)
-                }
-                Err(Throttled) => {
-                    let timeout = TIMEOUT.load(Ordering::Relaxed);
-                    info!("Throttled. Waiting {:?}ms and retrying", timeout);
-                    async_std::task::sleep(Duration::from_millis(timeout)).await;
-                    self.with_retries(id, try_number).await
-                }
-                Err(TooManyRequests) => {
-                    let timeout = (change_timeout(TIMEOUT_INCR) as f32 * fuzzy) as u64;
-                    info!("Too many requests. Waiting {:?}ms and retrying", timeout);
-                    async_std::task::sleep(Duration::from_millis(timeout)).await;
-                    self.with_retries(id, try_number).await
-                }
-                Err(err) => {
-                    info!(
-                        "Get entity failed. try={} timeout={:?} {:?}",
-                        try_number, TIMEOUT, err
-                    );
-                    if try_number >= MAX_TRIES {
-                        Err(err)
-                    } else {
-                        let timeout = (change_timeout(TIMEOUT_INCR) as f32 * fuzzy) as u64;
-                        async_std::task::sleep(Duration::from_millis(timeout)).await;
-                        self.with_retries(id, try_number + 1).await
-                    }
-                }
-            }
-        })
-    }
 
     fn map_http_err_to_backoff(e: Error) -> backoff::Error<Error> {
         use Error::*;
@@ -172,32 +121,6 @@ impl Default for GetEntityClient {
         let client_pool = GetEntityClient::new(NonZeroUsize::new(MAX_CLIENTS).unwrap(), rate);
         client_pool
     }
-}
-
-const INITIAL_TIMEOUT: u64 = 1;
-const MAX_TIMEOUT: u64 = 5_000;
-const MIN_TIMEOUT: u64 = 5;
-static TIMEOUT: AtomicU64 = AtomicU64::new(INITIAL_TIMEOUT);
-const TIMEOUT_INCR: f32 = 1.1;
-const TIMEOUT_REDUCE: f32 = 0.999;
-const MAX_TRIES: u8 = 50;
-
-fn change_timeout(factor: f32) -> u64 {
-    let mut initial_timeout = TIMEOUT.load(Ordering::Relaxed);
-    if initial_timeout < INITIAL_TIMEOUT && factor > 1.0 {
-        initial_timeout = INITIAL_TIMEOUT;
-    }
-    let timeout: f32 = initial_timeout as f32 * factor;
-    let mut timeout = timeout.round() as u64;
-    if timeout == initial_timeout && timeout != 0 {
-        timeout -= 1;
-    }
-
-    timeout = timeout.min(MAX_TIMEOUT);
-    timeout = timeout.max(MIN_TIMEOUT);
-
-    TIMEOUT.store(timeout, Ordering::Relaxed);
-    timeout as u64
 }
 
 fn extract_revision_id(id: EntityId, value: &Value) -> u64 {

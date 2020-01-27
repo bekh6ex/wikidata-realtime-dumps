@@ -56,7 +56,13 @@ pub async fn init(
 
     let stream: ThisStream = {
         let id_stream = id_stream(min, max, ty);
-        let dump_stream = get_dump_stream(ty).await;
+        let dump_stream = get_dump_stream(ty).await
+            .enumerate()
+            .map(|(i, e)| {
+                if i % 100_000 == 0 {info!("Filtered dump up to {:?}", e.id)}
+                e
+            })
+            .filter(move |e: &SerializedEntity| ready(e.id.n() >= min) );
         let client = client.clone();
 
         let joined = JoinStreams::new(id_stream, dump_stream, move |id: EntityId| {
