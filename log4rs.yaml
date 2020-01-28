@@ -1,3 +1,5 @@
+refresh_rate: 30 seconds
+
 appenders:
   stdout:
     kind: console
@@ -10,4 +12,6 @@ root:
 loggers:
   wikidata_realtime_dumps:
     level: info
+  wikidata_realtime_dumps::get_entity:
+    level: debug
 

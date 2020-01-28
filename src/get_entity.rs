@@ -38,7 +38,18 @@ impl GetEntityClient {
         let this = self.clone();
 
         let get_this_entity = move || {
-            this.clone().get_entity_internal(id)
+            this.clone().get_entity_internal(id).map(|r:Result<Option<GetEntityResult>, Error>| {
+                r.map_err(|e| {
+                    match &e {
+                        Error::Throttled => debug!("Throttled"),
+                        Error::TooManyRequests => debug!("Too many requests"),
+                        Error::GetResponse(e) => info!("Response error: {:?}", e),
+                        Error::ResponseFormat { cause, body } =>
+                            warn!("Wrong response format: {:?}. Body: {}", cause, body),
+                    }
+                    e
+                })
+            })
         };
 
         async move {
