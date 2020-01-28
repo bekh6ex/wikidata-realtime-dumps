@@ -2,31 +2,31 @@ use async_compression::stream::BzDecoder;
 use async_std::prelude::*;
 use futures::future::ready;
 use futures::stream::*;
-
 use futures::StreamExt;
 use futures_codec::{FramedRead, LinesCodec};
 use hyper::{Body, Client, Request};
-use log::*;
-use serde::Deserialize;
-
-use crate::http_client::create_client;
-use crate::prelude::*;
-use continuous_download::ContinuousDownloadStream;
 use hyper::body::Bytes;
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper_rustls::HttpsConnector;
+use log::*;
+use serde::Deserialize;
+
+use continuous_download::ContinuousDownloadStream;
 use sorted_stream::BufferedSortedStream;
 
-pub(super) async fn get_dump_stream(ty: EntityType) -> impl Stream<Item = SerializedEntity> {
+use crate::http_client::create_client;
+use crate::prelude::*;
+
+pub(super) async fn get_dump_stream(ty: EntityType) -> impl Stream<Item=SerializedEntity> {
     let stream = json_stream().await;
     let stream = convert_to_serialized_entity(ty, stream);
     sort_stream(stream)
 }
 
 fn sort_stream(
-    stream: impl Stream<Item = SerializedEntity>,
-) -> impl Stream<Item = SerializedEntity> {
+    stream: impl Stream<Item=SerializedEntity>,
+) -> impl Stream<Item=SerializedEntity> {
     BufferedSortedStream::new(stream.fuse(), 200)
 }
 
@@ -34,22 +34,30 @@ fn convert_to_serialized_entity(
     ty: EntityType,
     stream: impl Stream<Item = String>,
 ) -> impl Stream<Item = SerializedEntity> {
-    stream.filter_map(move |s: String| {
-        let result = serde_json::from_str::<EntityInDump>(&s)
-            .unwrap_or_else(|_| panic!("Wrong entity format: {}", s));
-
-        ready(match ty.parse_id(&result.id) {
-            Err(e) => {
-                info!("{}", e);
-                None
-            }
-            Ok(id) => Some(SerializedEntity {
-                id,
-                revision: RevisionId(result.lastrevid),
-                data: s,
-            }),
+    stream
+        .map(|s| {
+            async_std::task::spawn(async move {
+                let e = serde_json::from_str::<EntityInDump>(&s)
+                    .unwrap_or_else(|_| panic!("Wrong entity format: {}", s));
+                (e, s)
+            })
         })
-    })
+        .buffered(num_cpus::get() * 2)
+        .filter_map(move |(result, s)| {
+            ready(
+                match ty.parse_id(&result.id) {
+                    Err(e) => {
+                        info!("{}", e);
+                        None
+                    }
+                    Ok(id) => Some(SerializedEntity {
+                        id,
+                        revision: RevisionId(result.lastrevid),
+                        data: s,
+                    }),
+                }
+            )
+        })
 }
 
 async fn do_request(
