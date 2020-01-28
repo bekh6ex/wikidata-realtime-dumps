@@ -87,7 +87,7 @@ pub async fn init(
     };
 
     stream
-        .buffered(50)
+        .buffered(300)
         .filter_map(move |se: Option<SerializedEntity>| {
             let event_id = event_id.clone();
             ready(se.map(move |se| UpdateCommand {
