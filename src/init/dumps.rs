@@ -47,7 +47,6 @@ fn convert_to_serialized_entity(
             ready(
                 match ty.parse_id(&result.id) {
                     Err(e) => {
-                        info!("{}", e);
                         None
                     }
                     Ok(id) => Some(SerializedEntity {
