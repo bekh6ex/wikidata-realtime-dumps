@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
-use backoff_futures::BackoffExt;
+use futures_backoff::*;
 use futures::*;
 use log::*;
 use serde::Deserialize;
@@ -13,6 +13,7 @@ use stream_throttle::{ThrottlePool, ThrottleRate};
 
 use crate::http_client::{Client, create_client, Error, get_json};
 use crate::prelude::*;
+use warp::get;
 
 #[derive(Clone)]
 pub struct GetEntityClient {
@@ -37,19 +38,17 @@ impl GetEntityClient {
         let this = self.clone();
 
         let get_this_entity = move || {
-            this.clone().get_entity_internal(id).map(|r| r.map_err(Self::map_http_err_to_backoff))
+            this.clone().get_entity_internal(id)
         };
 
         async move {
-            let mut backoff = backoff::ExponentialBackoff{
-                initial_interval: Duration::from_millis(5),
-                max_interval: Duration::from_secs(5),
-                ..backoff::ExponentialBackoff::default()
-            };
+            let strategy = futures_backoff::Strategy::exponential(Duration::from_millis(5))
+                .with_jitter(true)
+                .with_max_delay(Duration::from_secs(5))
+                .with_max_retries(100)
+                .retry(get_this_entity);
 
-            let eventual_response = get_this_entity.with_backoff(&mut backoff);
-
-            eventual_response.map(|r| {
+            strategy.map(|r| {
                 r.expect("Failed to get an entity")
                     .map(GetEntityResult::into_serialized_entity)
             }).await
@@ -60,25 +59,6 @@ impl GetEntityClient {
     fn client(&self) -> &Client {
         let index = self.pool_index.fetch_add(1, Ordering::Relaxed);
         &self.client_pool[index % self.client_pool.len()]
-    }
-
-
-    fn map_http_err_to_backoff(e: Error) -> backoff::Error<Error> {
-        use Error::*;
-        match e {
-            Throttled => {
-                debug!("Throttled. Waiting and retrying");
-                backoff::Error::Transient(Throttled)
-            }
-            TooManyRequests => {
-                info!("TooManyRequests. Waiting and retrying");
-                backoff::Error::Transient(TooManyRequests)
-            }
-            err => {
-                warn!("Get entity failed. {:?}", err);
-                backoff::Error::Transient(err)
-            }
-        }
     }
 
     async fn get_entity_internal(self, id: EntityId) -> Result<Option<GetEntityResult>, Error> {
@@ -167,12 +147,11 @@ mod test {
     use futures::stream::*;
     use log::*;
     use stream_throttle::ThrottleRate;
-    use tokio;
 
     use crate::get_entity::GetEntityClient;
     use crate::prelude::EntityType;
 
-    #[actix_rt::test]
+    #[actix_rt::test] #[test]
     async fn test_rate() {
         init_logger();
         info!("Starting");
@@ -186,12 +165,13 @@ mod test {
             .map(|i| EntityType::Item.id(i))
             .map(move |id| {
                 let client = client.clone();
+                info!("Get entity {:?}", id);
                 client.get_entity(id)
             })
             .buffered(50)
             .enumerate()
             .for_each(|(i, e)| async move {
-                if i % 1000 == 0 {
+                if i % 1 == 0 {
                     info!("Got {}", i)
                 }
             })

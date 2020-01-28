@@ -29,7 +29,7 @@ flate2 = "1.0.13"
 pin-utils = "0.1.0-alpha.4"
 futures-util = "0.3.1"
 # TODO try out either of the following
-backoff-futures = "0.2.0"
+futures-backoff = { git="https://github.com/bcmcmill/rust-futures-backoff.git", branch="async_await" }
 backoff = "0.1.5"
 measure_time = "0.6"
 hyper = "0.13"
@@ -47,6 +47,7 @@ stream_throttle = "0.2.1"
 
 [dev-dependencies]
 futures-test = "0.3.1"
+
 
 
 [dev-dependencies.async-std]
