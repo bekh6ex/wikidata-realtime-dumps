@@ -84,7 +84,7 @@ pub async fn init(
         entity_stream
     };
 
-    let final_stream = if max - min < 1_000_000 {
+    let final_stream = if true {
         raw_stream.left_stream()
     } else {
         stream_with_dump.right_stream()
