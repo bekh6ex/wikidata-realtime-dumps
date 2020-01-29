@@ -34,6 +34,9 @@ fn convert_to_serialized_entity(
     ty: EntityType,
     stream: impl Stream<Item = String>,
 ) -> impl Stream<Item = SerializedEntity> {
+
+    //2020-01-29T04:26:13.329976216+00:00 INFO continuous_download - Stream ended.
+    //thread 'main' panicked at 'Dump response stream terminated: Custom { kind: UnexpectedEof, error: "bytes remaining in stream" }', src/libcore/result.rs:1165:5
     stream
         .map(|s| {
             async_std::task::spawn(async move {

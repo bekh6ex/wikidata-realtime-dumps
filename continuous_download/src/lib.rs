@@ -99,7 +99,7 @@ where
                     continue;
                 }
                 None => {
-                    info!("Stream ended.");
+                    info!("Stream ended. Total bytes in stream: {}", self.position);
                     return Poll::Ready(None);
                 }
             }
