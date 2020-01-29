@@ -16,6 +16,7 @@ use crate::init::dumps::get_dump_stream;
 use crate::prelude::*;
 use crate::stream_ext::join_streams::JoinStreams;
 use std::pin::Pin;
+use std::process::id;
 
 
 mod dumps;
@@ -53,10 +54,7 @@ pub async fn init(
     //        })
     //    }
 
-    type ThisStream =
-        Pin<Box<dyn Stream<Item = Pin<Box<dyn Future<Output = Option<SerializedEntity>>>>>>>;
-
-    let stream: ThisStream = {
+    let stream_with_dump = {
         let id_stream = id_stream(min, max, ty);
         let dump_stream = get_dump_stream(ty).await
             .enumerate()
@@ -70,23 +68,29 @@ pub async fn init(
         let client = client.clone();
 
         let joined = JoinStreams::new(id_stream, dump_stream, move |id: EntityId| {
-            // To not make a lot of requests in the same time
-            let timeout = id.n() % 50;
-            let client = client.clone();
-            async_std::task::sleep(Duration::from_millis(timeout as u64))
-                .then(move |_| client.get_entity(id))
-        })
-        .map(pin);
-        fn pin(
-            f: impl Future<Output = Option<SerializedEntity>> + 'static,
-        ) -> Pin<Box<dyn Future<Output = Option<SerializedEntity>>>> {
-            Box::pin(f)
-        }
+            client.get_entity(id)
+        });
 
-        Box::pin(joined)
+        joined
     };
 
-    stream
+    let raw_stream = {
+        let client = client.clone();
+        let id_stream = id_stream(min, max, ty);
+        let entity_stream = id_stream.map(move |id| {
+           client.get_entity(id).left_future()
+        });
+
+        entity_stream
+    };
+
+    let final_stream = if max - min < 1_000_000 {
+        raw_stream.left_stream()
+    } else {
+        stream_with_dump.right_stream()
+    };
+
+    final_stream
         .buffered(150)
         .filter_map(move |se: Option<SerializedEntity>| {
             let event_id = event_id.clone();
