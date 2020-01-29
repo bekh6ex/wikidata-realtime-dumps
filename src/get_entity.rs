@@ -34,6 +34,7 @@ impl GetEntityClient {
         }
     }
 
+    // TODO: Handle revision ID
     pub fn get_entity(&self, id: EntityId) -> impl Future<Output = Option<SerializedEntity>> {
         let this = self.clone();
 
