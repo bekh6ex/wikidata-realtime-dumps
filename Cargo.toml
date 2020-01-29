@@ -28,7 +28,6 @@ async-std = "1.4.0"
 flate2 = "1.0.13"
 pin-utils = "0.1.0-alpha.4"
 futures-util = "0.3.1"
-# TODO try out either of the following
 futures-backoff = { git="https://github.com/bcmcmill/rust-futures-backoff.git", branch="async_await" }
 backoff = "0.1.5"
 measure_time = "0.6"
@@ -43,7 +42,7 @@ futures-timer = "2.0.2"
 num_cpus = "1.12.0"
 continuous_download = { path="continuous_download"}
 sorted_stream = { path="sorted_stream"}
-stream_throttle = "0.2.1"
+stream_throttle = { git="https://github.com/bekh6ex/stream-throttle.git", branch="use-futures-timer"}
 
 [dev-dependencies]
 futures-test = "0.3.1"
