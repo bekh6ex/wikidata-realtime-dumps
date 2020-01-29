@@ -8,11 +8,25 @@ use hyper_rustls::HttpsConnector;
 use log::*;
 
 use serde::de::Deserialize;
+use rand::Rng;
 
 pub type Client = HyperClient<HttpsConnector<HttpConnector<GaiResolver>>, Body>;
 
 pub fn create_client() -> Client {
     HyperClient::builder().build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new())
+}
+
+fn generate_session_id() -> String {
+    let chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut session = [0u8; 20];
+
+    rand::thread_rng().fill(&mut session);
+    let session = session.iter().map(|b| {
+        let index = *b as usize % chars.len();
+        chars.as_bytes()[index]
+    }).collect::<Vec<_>>();
+    let session = String::from_utf8_lossy(&session);
+    session.into()
 }
 
 pub fn get_json<'a, T: Deserialize<'a>>(
@@ -21,9 +35,12 @@ pub fn get_json<'a, T: Deserialize<'a>>(
 ) -> impl Future<Output = Result<Option<T>, Error>> + Send {
     let client = client.clone();
     async move {
+        let session = generate_session_id();
+
         let req = Request::builder()
             .method("GET")
             .header("Accept-Encoding", "deflate")
+            .header("Cookie", "Session=".to_owned() + &session)
             .uri(url.clone())
             .body(Body::empty())
             .unwrap();
