@@ -39,7 +39,7 @@ impl GetEntityClient {
         let this = self.clone();
 
         let get_this_entity = move || {
-            this.clone().get_entity_internal(id).map(|r:Result<Option<GetEntityResult>, Error>| {
+            this.clone().get_entity_internal(id, None).map(|r:Result<Option<GetEntityResult>, Error>| {
                 r.map_err(|e| {
                     match &e {
                         Error::TooManyRequests => debug!("Too many requests"),
@@ -72,13 +72,21 @@ impl GetEntityClient {
         &self.client_pool[index % self.client_pool.len()]
     }
 
-    async fn get_entity_internal(self, id: EntityId) -> Result<Option<GetEntityResult>, Error> {
+    async fn get_entity_internal(self, id: EntityId, rev: Option<RevisionId>) -> Result<Option<GetEntityResult>, Error> {
         futures::compat::Compat01As03::new(self.rate_pool.queue()).await.unwrap();
 
-        let url = format!(
-            "https://www.wikidata.org/wiki/Special:EntityData/{}.json",
-            id
-        );
+        let url = if let Some(RevisionId(rev)) = rev {
+            format!(
+                "https://www.wikidata.org/wiki/Special:EntityData/{}.json?revision={}",
+                id,
+                rev
+            )
+        } else {
+            format!(
+                "https://www.wikidata.org/wiki/Special:EntityData/{}.json",
+                id
+            )
+        };
 
         let response = get_json::<SpecialEntityResponse>(self.client(), url).await?;
         if response.is_none() {
