@@ -80,7 +80,6 @@ pub fn get_json<'a, T: Deserialize<'a>>(
 
 #[derive(Debug)]
 pub enum Error {
-    Throttled,
     TooManyRequests,
     GetResponse(hyper::Error),
     ResponseFormat {

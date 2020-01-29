@@ -42,7 +42,6 @@ impl GetEntityClient {
             this.clone().get_entity_internal(id).map(|r:Result<Option<GetEntityResult>, Error>| {
                 r.map_err(|e| {
                     match &e {
-                        Error::Throttled => debug!("Throttled"),
                         Error::TooManyRequests => debug!("Too many requests"),
                         Error::GetResponse(e) => info!("Response error: {:?}", e),
                         Error::ResponseFormat { cause, body } =>
@@ -74,9 +73,7 @@ impl GetEntityClient {
     }
 
     async fn get_entity_internal(self, id: EntityId) -> Result<Option<GetEntityResult>, Error> {
-        futures::compat::Compat01As03::new(self.rate_pool.queue())
-            .map_err(|_| Error::Throttled)
-            .await?;
+        futures::compat::Compat01As03::new(self.rate_pool.queue()).await.unwrap();
 
         let url = format!(
             "https://www.wikidata.org/wiki/Special:EntityData/{}.json",
