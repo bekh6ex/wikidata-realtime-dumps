@@ -22,7 +22,7 @@ mod volume;
 
 const ARBITERS: usize = 8;
 
-const MAX_CHUNK_SIZE: usize = 22 * 1024 * 1024;
+const MAX_CHUNK_SIZE: usize = 44 * 1024 * 1024;
 //const MAX_CHUNK_SIZE: usize = 5 * 1024 * 1024;
 
 pub(crate) struct Archivarius {

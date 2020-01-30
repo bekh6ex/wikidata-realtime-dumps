@@ -16,7 +16,7 @@ use self::storage::Volume;
 use std::time::Duration;
 use storage::VolumeStorage;
 
-const MAX_CHUNK_SIZE: usize = 22 * 1024 * 1024;
+const MAX_CHUNK_SIZE: usize = 44 * 1024 * 1024;
 
 pub struct VolumeKeeper {
     i: i32,
