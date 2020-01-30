@@ -1,4 +1,4 @@
-use crate::archive::{UpdateChunkCommand};
+use crate::archive::UpdateChunkCommand;
 use actix::{Actor, AsyncContext, Context, Handler, Message, MessageResult, SpawnHandle};
 use bytes::Bytes;
 
@@ -16,6 +16,7 @@ use self::storage::Volume;
 use std::time::Duration;
 use storage::VolumeStorage;
 
+#[allow(dead_code)]
 const MAX_CHUNK_SIZE: usize = 44 * 1024 * 1024;
 
 pub struct VolumeKeeper {
@@ -91,6 +92,7 @@ impl VolumeKeeper {
     //        }
     //    }
 
+    #[allow(dead_code)]
     fn finish_the_volume() {}
 
     fn remind_to_write_down(&mut self, ctx: &mut Context<Self>) {

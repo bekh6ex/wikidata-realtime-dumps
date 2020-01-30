@@ -13,7 +13,7 @@ use std::pin::Pin;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-pub(crate) use self::archivarius::{Archivarius, InitializationFinished, StartInitialization};
+pub(crate) use self::archivarius::{Archivarius, Initialization, QueryState};
 
 pub(crate) type ArchivariusMap = Arc<BTreeMap<EntityType, Addr<Archivarius>>>;
 

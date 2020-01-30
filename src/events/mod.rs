@@ -1,4 +1,3 @@
-
 use std::time::Duration;
 
 use futures::future::ready;
@@ -10,7 +9,6 @@ use sse_codec::Event;
 
 use crate::archive::UpdateCommand;
 use crate::get_entity::GetEntityClient;
-
 
 use super::prelude::*;
 use crate::events::event_stream::response_to_stream;

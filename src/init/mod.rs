@@ -1,33 +1,27 @@
-use std::time::Duration;
-
 use futures::future::{ready, FutureExt};
-use futures::stream::{iter, StreamExt};
+use futures::stream::{iter, once, StreamExt};
 use futures::Stream;
 use log::*;
 use serde::Deserialize;
 
-use warp::Future;
-
-use crate::archive::UpdateCommand;
+use crate::archive::Initialization;
 use crate::events::EventId;
 use crate::get_entity::GetEntityClient;
 use crate::http_client::{create_client, get_json};
 use crate::init::dumps::get_dump_stream;
 use crate::prelude::*;
 use crate::stream_ext::join_streams::JoinStreams;
-use std::pin::Pin;
-use std::process::id;
-
 
 mod dumps;
 
 pub async fn init(
     ty: EntityType,
     start_id: Option<EntityId>,
-    event_id: EventId,
-) -> impl Stream<Item = UpdateCommand> {
+    current_event_id: EventId,
+) -> impl Stream<Item = Initialization> {
+    let init_start_stream = once(ready(Initialization::Start(current_event_id)));
+    let init_end_stream = once(ready(Initialization::Finished));
 
-    // TODO: Store latest event id in Archivarius
     let latest_id = get_latest_entity_id(ty).await;
     let safety_offset = 100;
 
@@ -38,33 +32,18 @@ pub async fn init(
 
     debug!("Creating init stream for {:?}", ty);
 
-    //    fn get_ser_cons(client_pool: Arc <Vec<Client>>) -> impl FnMut<(EntityId), Output = impl Future<Output = Option<SerializedEntity>>> {
-    //        (|id: EntityId|  {
-    //            let pool_index = id.n() as usize % client_pool.len();
-    //            let client = Arc::new(client_pool[pool_index].clone());
-    //            let timeout = id.n() % 50;
-    //
-    //            async move {
-    //                // To not make a lot of requests in the same time
-    //                async_std::task::sleep(Duration::from_millis(timeout as u64)).await;
-    //                let option = get_entity(client, id).await;
-    //                let result: Option<SerializedEntity> = option.map(|e| e.into_serialized_entity());
-    //                result
-    //            }
-    //        })
-    //    }
-
     let stream_with_dump = {
         let id_stream = id_stream(min, max, ty);
-        let dump_stream = get_dump_stream(ty).await
+        let dump_stream = get_dump_stream(ty)
+            .await
             .enumerate()
             .filter_map(move |(i, e)| {
                 let process = e.id.n() >= min;
                 if !process && i % 100_000 == 0 {
                     info!("Filtered {} entities from dump up to {:?}", i, e.id);
                 }
-                ready(if process {Some(e)} else {None})
-            }  );
+                ready(if process { Some(e) } else { None })
+            });
         let client = client.clone();
 
         let joined = JoinStreams::new(id_stream, dump_stream, move |id: EntityId| {
@@ -77,9 +56,7 @@ pub async fn init(
     let raw_stream = {
         let client = client.clone();
         let id_stream = id_stream(min, max, ty);
-        let entity_stream = id_stream.map(move |id| {
-           client.get_entity(id).left_future()
-        });
+        let entity_stream = id_stream.map(move |id| client.get_entity(id).left_future());
 
         entity_stream
     };
@@ -90,15 +67,15 @@ pub async fn init(
         stream_with_dump.right_stream()
     };
 
-    final_stream
+    let update_stream = final_stream
         .buffered(150)
-        .filter_map(move |se: Option<SerializedEntity>| {
-            let event_id = event_id.clone();
-            ready(se.map(move |se| UpdateCommand {
-                event_id,
-                entity: se,
-            }))
-        })
+        .filter_map(|se: Option<SerializedEntity>| {
+            ready(se.map(move |se| Initialization::UpdateEntity(se)))
+        });
+
+    init_start_stream
+        .chain(update_stream)
+        .chain(init_end_stream)
 }
 
 fn id_stream(min: u32, max: u32, ty: EntityType) -> impl Stream<Item = EntityId> {

@@ -1,19 +1,18 @@
 use std::future::Future;
 use std::num::NonZeroUsize;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
-use futures_backoff::*;
 use futures::*;
+use futures_backoff::Strategy;
 use log::*;
 use serde::Deserialize;
 use serde_json::Value;
 use stream_throttle::{ThrottlePool, ThrottleRate};
 
-use crate::http_client::{Client, create_client, Error, get_json};
+use crate::http_client::{create_client, get_json, Client, Error};
 use crate::prelude::*;
-use warp::get;
 
 #[derive(Clone)]
 pub struct GetEntityClient {
@@ -39,32 +38,36 @@ impl GetEntityClient {
         let this = self.clone();
 
         let get_this_entity = move || {
-            this.clone().get_entity_internal(id, None).map(|r:Result<Option<GetEntityResult>, Error>| {
-                r.map_err(|e| {
-                    match &e {
-                        Error::TooManyRequests => debug!("Too many requests"),
-                        Error::GetResponse(e) => info!("Response error: {:?}", e),
-                        Error::ResponseFormat { cause, body } =>
-                            warn!("Wrong response format: {:?}. Body: {}", cause, body),
-                    }
-                    e
-                })
-            })
+            this.clone().get_entity_internal(id, None).map(
+                |r: Result<Option<GetEntityResult>, Error>| {
+                    r.map_err(|e| {
+                        match &e {
+                            Error::TooManyRequests => debug!("Too many requests"),
+                            Error::GetResponse(e) => info!("Response error: {:?}", e),
+                            Error::ResponseFormat { cause, body } => {
+                                warn!("Wrong response format: {:?}. Body: {}", cause, body)
+                            }
+                        }
+                        e
+                    })
+                },
+            )
         };
 
         async move {
-            let strategy = futures_backoff::Strategy::exponential(Duration::from_millis(5))
+            let strategy = Strategy::exponential(Duration::from_millis(5))
                 .with_jitter(true)
                 .with_max_delay(Duration::from_secs(5))
                 .with_max_retries(100)
                 .retry(get_this_entity);
 
-            strategy.map(|r| {
-                r.expect("Failed to get an entity")
-                    .map(GetEntityResult::into_serialized_entity)
-            }).await
+            strategy
+                .map(|r| {
+                    r.expect("Failed to get an entity")
+                        .map(GetEntityResult::into_serialized_entity)
+                })
+                .await
         }
-
     }
 
     fn client(&self) -> &Client {
@@ -72,14 +75,19 @@ impl GetEntityClient {
         &self.client_pool[index % self.client_pool.len()]
     }
 
-    async fn get_entity_internal(self, id: EntityId, rev: Option<RevisionId>) -> Result<Option<GetEntityResult>, Error> {
-        futures::compat::Compat01As03::new(self.rate_pool.queue()).await.unwrap();
+    async fn get_entity_internal(
+        self,
+        id: EntityId,
+        rev: Option<RevisionId>,
+    ) -> Result<Option<GetEntityResult>, Error> {
+        futures::compat::Compat01As03::new(self.rate_pool.queue())
+            .await
+            .unwrap();
 
         let url = if let Some(RevisionId(rev)) = rev {
             format!(
                 "https://www.wikidata.org/wiki/Special:EntityData/{}.json?revision={}",
-                id,
-                rev
+                id, rev
             )
         } else {
             format!(
@@ -160,7 +168,6 @@ mod test {
     use std::sync::Arc;
     use std::time::Duration;
 
-    use futures::future::ready;
     use futures::stream::*;
     use log::*;
     use stream_throttle::ThrottleRate;
@@ -168,7 +175,8 @@ mod test {
     use crate::get_entity::GetEntityClient;
     use crate::prelude::EntityType;
 
-    #[actix_rt::test] #[test]
+    #[actix_rt::test]
+    #[test]
     async fn test_rate() {
         init_logger();
         info!("Starting");
@@ -187,19 +195,19 @@ mod test {
             })
             .buffered(50)
             .enumerate()
-            .for_each(|(i, e)| async move {
-                if i % 1 == 0 {
-                    info!("Got {}", i)
+            .for_each(|(i, _e)| {
+                async move {
+                    if i % 1 == 0 {
+                        info!("Got {}", i)
+                    }
                 }
             })
             .await;
     }
 
     fn init_logger() {
-        use log::LevelFilter;
         use log4rs::append::console::ConsoleAppender;
         use log4rs::config::{Appender, Root};
-
 
         let stdout: ConsoleAppender = ConsoleAppender::builder().build();
         let log_config = log4rs::config::Config::builder()

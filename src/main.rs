@@ -1,22 +1,22 @@
 #![forbid(unsafe_code)]
-#![type_length_limit="1308948"]
+#![type_length_limit = "1308948"]
 #![warn(unused_extern_crates)]
 
 use std::collections::BTreeMap;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use actix::prelude::*;
-use futures::future::ready;
-use futures::stream::{self, once};
+use futures::stream;
 use futures::{self, StreamExt};
 use log::*;
 
-use self::archive::{start, ArchivariusMap};
 use crate::archive::UpdateCommand;
-use crate::archive::{Archivarius, InitializationFinished, StartInitialization};
+use crate::archive::{Archivarius, QueryState};
 use crate::events::{get_current_event_id, update_command_stream, EventId};
 use crate::prelude::EntityType;
-use std::pin::Pin;
+
+use self::archive::{start, ArchivariusMap};
 
 mod archive;
 mod events;
@@ -87,40 +87,22 @@ async fn get_streams(
 async fn initialize(ty: EntityType, actor: Addr<Archivarius>) -> EventId {
     let current = get_current_event_id();
 
-    let response = actor
-        .send(StartInitialization)
-        .await
-        .expect("Failed commun");
+    let response = actor.send(QueryState).await.expect("Failed commun");
 
     let initial_event_id: EventId = response.last_event_id.unwrap_or(current.await);
 
     let init_stream = init::init(ty, response.initialized_up_to, initial_event_id.clone()).await;
 
-    let init_finished_stream = once(ready(None));
-
-    let send_forward = |e: UpdateCommand| {
-        let result = actor.send(e);
-        async_std::task::spawn(async move {
-            result.await.expect("Actor communication failed").await;
-            debug!("Got update result");
-        })
-    };
-
-    let init_stream = init_stream
-        .map(Option::Some)
-        .chain(init_finished_stream)
-        .for_each(|e| {
-            async {
-                match e {
-                    None => {
-                        actor.do_send(InitializationFinished);
-                    }
-                    Some(event) => {
-                        send_forward(event).await;
-                    }
-                }
-            }
-        });
+    let init_stream = init_stream.for_each(move |e| {
+        let actor = actor.clone();
+        async move {
+            actor
+                .send(e)
+                .await
+                .expect("Failed to initialize actor")
+                .await;
+        }
+    });
 
     init_stream.await;
 

@@ -5,8 +5,9 @@ use std::sync::{Arc, RwLock};
 
 use actix::{Actor, Addr, AsyncContext, Context, Handler, Message, MessageResult};
 use bytes::Bytes;
+use futures::future::*;
 use futures::stream::iter;
-use futures::StreamExt;
+use futures::*;
 use log::*;
 use serde::{Deserialize, Serialize};
 
@@ -129,6 +130,8 @@ impl Archivarius {
             } else if size > MAX_CHUNK_SIZE * 10 {
                 panic!("Size of a chunk is way too big: {}", size)
             }
+        } else {
+            debug!("Not closing volume yet. Size is: {}", size)
         }
     }
 
@@ -300,28 +303,28 @@ impl Handler<UpdateLastEventEventId> for Archivarius {
     }
 }
 
-pub struct StartInitialization;
+pub struct QueryState;
 
-pub struct StartInitializationResponse {
+pub struct QueryStateResponse {
     pub initialized_up_to: Option<EntityId>,
     pub last_event_id: Option<EventId>,
 }
 
-impl Message for StartInitialization {
-    type Result = StartInitializationResponse;
+impl Message for QueryState {
+    type Result = QueryStateResponse;
 }
 
-impl Handler<StartInitialization> for Archivarius {
-    type Result = MessageResult<StartInitialization>;
+impl Handler<QueryState> for Archivarius {
+    type Result = MessageResult<QueryState>;
 
-    fn handle(&mut self, _msg: StartInitialization, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, _msg: QueryState, _ctx: &mut Self::Context) -> Self::Result {
         let initialized_up_to = if self.everything_is_persisted {
             self.last_id_to_open_actor
         } else {
             self.closed_actors.last().map(|(r, _)| *r.inner.end())
         };
 
-        MessageResult(StartInitializationResponse {
+        MessageResult(QueryStateResponse {
             initialized_up_to,
             last_event_id: self.last_processed_event_id.clone(),
         })
@@ -344,6 +347,68 @@ impl EntityRange {
     fn next_adjacent(&self, up_to: EntityId) -> EntityRange {
         EntityRange {
             inner: RangeInclusive::new(self.inner.end().next(), up_to),
+        }
+    }
+}
+
+#[derive(Message)]
+#[rtype(result = "UnitFuture")]
+pub enum Initialization {
+    Start(EventId),
+    UpdateEntity(SerializedEntity),
+    Finished,
+}
+
+impl Handler<Initialization> for Archivarius {
+    type Result = MessageResult<Initialization>;
+
+    fn handle(&mut self, msg: Initialization, ctx: &mut Self::Context) -> Self::Result {
+        match msg {
+            Initialization::Start(init_even_id) => {
+                match &self.last_processed_event_id {
+                    None => {
+                        self.last_processed_event_id = Some(init_even_id);
+                    }
+                    Some(last_event_id) => {
+                        // Being conservative: if the init stream is started from event that is later
+                        // in time than we've seen (in case of app restart), ignore it.
+                        // Otherwise replace ours.
+                        if last_event_id >= &init_even_id {
+                            self.last_processed_event_id = Some(init_even_id);
+                        }
+                    }
+                }
+                MessageResult(Box::pin(ready(())) as UnitFuture)
+            }
+            Initialization::UpdateEntity(entity) => {
+                let self_addr = ctx.address();
+
+                debug!(
+                    "Initialization::UpdateEntity[ArchiveActor]: entity_id={}",
+                    entity.id
+                );
+                let id = entity.id;
+
+                let (is_open_actor, child) = self.find_volume(id);
+
+                if is_open_actor {
+                    self.last_id_to_open_actor = Some(id);
+                }
+
+                let result: UnitFuture = Box::pin(async move {
+                    let result = child.send(UpdateChunkCommand { entity });
+                    let size = result.await.expect("Communication with child failed");
+
+                    if is_open_actor {
+                        Self::maybe_close_the_open_volume(&self_addr, child, size);
+                    }
+                });
+                MessageResult(result)
+            }
+            Initialization::Finished => {
+                // Mark as initialized???
+                MessageResult(Box::pin(ready(())) as UnitFuture)
+            }
         }
     }
 }
@@ -389,6 +454,7 @@ impl<P: AsRef<Path>> ArchivariusStore<P> {
     }
 }
 
+#[allow(dead_code)]
 struct VolumeKeeperReport {
     keeper_id: i32,
     work: Vec<(EventId, EntityId)>,

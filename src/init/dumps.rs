@@ -4,12 +4,11 @@ use futures::future::ready;
 use futures::stream::*;
 use futures::StreamExt;
 use futures_codec::{FramedRead, LinesCodec};
-use hyper::{Body, Client, Request};
 use hyper::body::Bytes;
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
+use hyper::{Body, Client, Request};
 use hyper_rustls::HttpsConnector;
-use log::*;
 use serde::Deserialize;
 
 use continuous_download::ContinuousDownloadStream;
@@ -18,15 +17,15 @@ use sorted_stream::BufferedSortedStream;
 use crate::http_client::create_client;
 use crate::prelude::*;
 
-pub(super) async fn get_dump_stream(ty: EntityType) -> impl Stream<Item=SerializedEntity> {
+pub(super) async fn get_dump_stream(ty: EntityType) -> impl Stream<Item = SerializedEntity> {
     let stream = json_stream().await;
     let stream = convert_to_serialized_entity(ty, stream);
     sort_stream(stream)
 }
 
 fn sort_stream(
-    stream: impl Stream<Item=SerializedEntity>,
-) -> impl Stream<Item=SerializedEntity> {
+    stream: impl Stream<Item = SerializedEntity>,
+) -> impl Stream<Item = SerializedEntity> {
     BufferedSortedStream::new(stream.fuse(), 200)
 }
 
@@ -34,7 +33,6 @@ fn convert_to_serialized_entity(
     ty: EntityType,
     stream: impl Stream<Item = String>,
 ) -> impl Stream<Item = SerializedEntity> {
-
     //2020-01-29T04:26:13.329976216+00:00 INFO continuous_download - Stream ended.
     //thread 'main' panicked at 'Dump response stream terminated: Custom { kind: UnexpectedEof, error: "bytes remaining in stream" }', src/libcore/result.rs:1165:5
     stream
@@ -47,18 +45,14 @@ fn convert_to_serialized_entity(
         })
         .buffered(num_cpus::get() * 2)
         .filter_map(move |(result, s)| {
-            ready(
-                match ty.parse_id(&result.id) {
-                    Err(e) => {
-                        None
-                    }
-                    Ok(id) => Some(SerializedEntity {
-                        id,
-                        revision: RevisionId(result.lastrevid),
-                        data: s,
-                    }),
-                }
-            )
+            ready(match ty.parse_id(&result.id) {
+                Err(_) => None,
+                Ok(id) => Some(SerializedEntity {
+                    id,
+                    revision: RevisionId(result.lastrevid),
+                    data: s,
+                }),
+            })
         })
 }
 

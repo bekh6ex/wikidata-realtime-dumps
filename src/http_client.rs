@@ -7,8 +7,8 @@ use hyper_rustls::HttpsConnector;
 
 use log::*;
 
-use serde::de::Deserialize;
 use rand::Rng;
+use serde::de::Deserialize;
 
 pub type Client = HyperClient<HttpsConnector<HttpConnector<GaiResolver>>, Body>;
 
@@ -21,10 +21,13 @@ fn generate_session_id() -> String {
     let mut session = [0u8; 20];
 
     rand::thread_rng().fill(&mut session);
-    let session = session.iter().map(|b| {
-        let index = *b as usize % chars.len();
-        chars.as_bytes()[index]
-    }).collect::<Vec<_>>();
+    let session = session
+        .iter()
+        .map(|b| {
+            let index = *b as usize % chars.len();
+            chars.as_bytes()[index]
+        })
+        .collect::<Vec<_>>();
     let session = String::from_utf8_lossy(&session);
     session.into()
 }
