@@ -169,7 +169,29 @@ impl Archivarius {
 
         self.closed_actors.push((new_range, old_open_actor));
 
+        self.save_state();
+    }
+
+    fn save_state(&mut self) {
         self.store.save(self.state());
+    }
+
+    fn update_last_processed_event_id(&mut self, init_even_id: EventId) {
+        match &self.last_processed_event_id {
+            None => {
+                self.last_processed_event_id = Some(init_even_id);
+            }
+            Some(last_event_id) => {
+                // Being conservative: if the init stream is started from event that is later
+                // in time than we've seen (in case of app restart), ignore it.
+                // Otherwise replace ours.
+                if last_event_id >= &init_even_id {
+                    self.last_processed_event_id = Some(init_even_id);
+                }
+            }
+        }
+
+        self.save_state();
     }
 }
 
@@ -365,19 +387,8 @@ impl Handler<Initialization> for Archivarius {
     fn handle(&mut self, msg: Initialization, ctx: &mut Self::Context) -> Self::Result {
         match msg {
             Initialization::Start(init_even_id) => {
-                match &self.last_processed_event_id {
-                    None => {
-                        self.last_processed_event_id = Some(init_even_id);
-                    }
-                    Some(last_event_id) => {
-                        // Being conservative: if the init stream is started from event that is later
-                        // in time than we've seen (in case of app restart), ignore it.
-                        // Otherwise replace ours.
-                        if last_event_id >= &init_even_id {
-                            self.last_processed_event_id = Some(init_even_id);
-                        }
-                    }
-                }
+                self.update_last_processed_event_id(init_even_id);
+
                 MessageResult(Box::pin(ready(())) as UnitFuture)
             }
             Initialization::UpdateEntity(entity) => {
@@ -412,6 +423,7 @@ impl Handler<Initialization> for Archivarius {
         }
     }
 }
+
 
 pub struct InitializationFinished;
 
