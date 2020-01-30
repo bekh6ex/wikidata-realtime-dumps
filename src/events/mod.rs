@@ -101,6 +101,7 @@ pub async fn update_command_stream(
             let id = ty.parse_from_title(&title).unwrap();
             async move {
                 // TODO: Handle new and deleted
+                // TODO: Figure out which events have which revisions
                 let entity = client.get_entity(id).await?;
                 Some(UpdateCommand { event_id, entity })
             }
