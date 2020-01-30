@@ -85,28 +85,31 @@ async fn get_streams(
 }
 
 async fn initialize(ty: EntityType, actor: Addr<Archivarius>) -> EventId {
-    let current = get_current_event_id();
-
     let response = actor.send(QueryState).await.expect("Failed commun");
 
-    let initial_event_id: EventId = response.last_event_id.unwrap_or(current.await);
+    let init_stream = init::init(ty, response.initialized_up_to).await;
 
-    let init_stream = init::init(ty, response.initialized_up_to, initial_event_id.clone()).await;
-
-    let init_stream = init_stream.for_each(move |e| {
+    let init_stream = init_stream.for_each({
         let actor = actor.clone();
-        async move {
-            actor
-                .send(e)
-                .await
-                .expect("Failed to initialize actor")
-                .await;
+        move |e| {
+            let actor = actor.clone();
+            async move {
+                actor
+                    .send(e)
+                    .await
+                    .expect("Failed to initialize actor")
+                    .await;
+            }
         }
     });
 
     init_stream.await;
 
-    initial_event_id
+    let response = actor.send(QueryState).await.expect("Failed commun");
+
+    response
+        .last_event_id
+        .expect("Archivarius does not seem to be initialized")
 }
 
 fn init_logger() {

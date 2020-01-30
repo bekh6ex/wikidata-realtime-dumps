@@ -14,11 +14,15 @@ use serde::Deserialize;
 use continuous_download::ContinuousDownloadStream;
 use sorted_stream::BufferedSortedStream;
 
+use crate::events::EventId;
 use crate::http_client::create_client;
 use crate::prelude::*;
 
-pub(super) async fn get_dump_stream(ty: EntityType) -> impl Stream<Item = SerializedEntity> {
-    let stream = json_stream().await;
+pub(super) async fn get_dump_stream(
+    ty: EntityType,
+    dump_url: String,
+) -> impl Stream<Item = SerializedEntity> {
+    let stream = json_stream(dump_url).await;
     let stream = convert_to_serialized_entity(ty, stream);
     sort_stream(stream)
 }
@@ -58,13 +62,14 @@ fn convert_to_serialized_entity(
 
 async fn do_request(
     client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body>,
+    dump_url: String,
     from: usize,
 ) -> impl Stream<Item = std::io::Result<Bytes>> {
     let req = Request::builder()
         .method("GET")
         .header("Accept-Encoding", "deflate")
         .header("Range", format!("bytes={}-", from))
-        .uri("https://dumps.wikimedia.org/other/wikibase/wikidatawiki/latest-all.json.bz2");
+        .uri(dump_url);
 
     let resp = client
         .request(req.body(Body::empty()).unwrap())
@@ -78,19 +83,27 @@ async fn do_request(
 
 fn download_dump_with_restarts(
     client: Client<HttpsConnector<HttpConnector<GaiResolver>>, Body>,
+    dump_url: String,
 ) -> impl Stream<Item = std::io::Result<Bytes>> {
     let client = client;
     ContinuousDownloadStream::new(
-        move |offset| once(Box::pin(do_request(client.clone(), offset))).flatten(),
+        move |offset| {
+            once(Box::pin(do_request(
+                client.clone(),
+                dump_url.clone(),
+                offset,
+            )))
+            .flatten()
+        },
         10_000,
     )
 }
 
-async fn json_stream() -> impl Stream<Item = String> {
+async fn json_stream(dump_url: String) -> impl Stream<Item = String> {
     let client1 = create_client();
     let client = client1;
 
-    let stream = download_dump_with_restarts(client);
+    let stream = download_dump_with_restarts(client, dump_url);
 
     let stream = BzDecoder::new(stream);
 

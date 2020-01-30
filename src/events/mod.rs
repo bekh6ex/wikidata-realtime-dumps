@@ -186,7 +186,7 @@ pub struct EventId {
 }
 
 impl EventId {
-    fn new(inner: String) -> Self {
+    pub fn new(inner: String) -> Self {
         let parts = serde_json::from_str::<Vec<SerializedEventIdPart>>(&inner)
             .unwrap_or_else(|e| panic!("Unexpected EventId format: '{}. {}'", inner, e));
         EventId { parts }

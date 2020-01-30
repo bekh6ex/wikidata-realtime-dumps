@@ -15,5 +15,5 @@ loggers:
   wikidata_realtime_dumps::get_entity:
     level: debug
   wikidata_realtime_dumps::archive::archivarius:
-    level: debug
+    level: info
 

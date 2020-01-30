@@ -5,7 +5,7 @@ use log::*;
 use serde::Deserialize;
 
 use crate::archive::Initialization;
-use crate::events::EventId;
+use crate::events::{get_current_event_id, EventId};
 use crate::get_entity::GetEntityClient;
 use crate::http_client::{create_client, get_json};
 use crate::init::dumps::get_dump_stream;
@@ -17,9 +17,7 @@ mod dumps;
 pub async fn init(
     ty: EntityType,
     start_id: Option<EntityId>,
-    current_event_id: EventId,
 ) -> impl Stream<Item = Initialization> {
-    let init_start_stream = once(ready(Initialization::Start(current_event_id)));
     let init_end_stream = once(ready(Initialization::Finished));
 
     let latest_id = get_latest_entity_id(ty).await;
@@ -32,39 +30,47 @@ pub async fn init(
 
     debug!("Creating init stream for {:?}", ty);
 
-    let stream_with_dump = {
+    let dump_pair = {
+        let dump_url = "https://dumps.wikimedia.org/other/wikibase/wikidatawiki/20200120/wikidata-20200120-all.json.bz2".to_owned();
+        // "2020-01-19T17:57:34.000Z"
+        let dump_event_id = "[{\"topic\":\"eqiad.mediawiki.recentchange\",\"partition\":0,\"timestamp\":1579456654000},{\"topic\":\"codfw.mediawiki.recentchange\",\"partition\":0,\"offset\":-1}]";
+        let dump_event_id = EventId::new(dump_event_id.to_owned());
         let id_stream = id_stream(min, max, ty);
-        let dump_stream = get_dump_stream(ty)
-            .await
-            .enumerate()
-            .filter_map(move |(i, e)| {
-                let process = e.id.n() >= min;
-                if !process && i % 100_000 == 0 {
-                    info!("Filtered {} entities from dump up to {:?}", i, e.id);
-                }
-                ready(if process { Some(e) } else { None })
-            });
+        let dump_stream =
+            get_dump_stream(ty, dump_url)
+                .await
+                .enumerate()
+                .filter_map(move |(i, e)| {
+                    let process = e.id.n() >= min;
+                    if !process && i % 100_000 == 0 {
+                        info!("Filtered {} entities from dump up to {:?}", i, e.id);
+                    }
+                    ready(if process { Some(e) } else { None })
+                });
         let client = client.clone();
 
         let joined = JoinStreams::new(id_stream, dump_stream, move |id: EntityId| {
             client.get_entity(id)
         });
 
-        joined
+        (dump_event_id, joined)
     };
 
-    let raw_stream = {
+    let raw_pair = {
+        let current = get_current_event_id().await;
         let client = client.clone();
         let id_stream = id_stream(min, max, ty);
         let entity_stream = id_stream.map(move |id| client.get_entity(id).left_future());
 
-        entity_stream
+        (current, entity_stream)
     };
 
-    let final_stream = if max - min < 1_000_000 {
-        raw_stream.left_stream()
+    let (event_id, final_stream) = if max - min < 1_000_000 {
+        let (event_id, stream) = raw_pair;
+        (event_id, stream.left_stream())
     } else {
-        stream_with_dump.right_stream()
+        let (event_id, stream) = dump_pair;
+        (event_id, stream.right_stream())
     };
 
     let update_stream = final_stream
@@ -72,6 +78,8 @@ pub async fn init(
         .filter_map(|se: Option<SerializedEntity>| {
             ready(se.map(move |se| Initialization::UpdateEntity(se)))
         });
+
+    let init_start_stream = once(ready(Initialization::Start(event_id)));
 
     init_start_stream
         .chain(update_stream)
