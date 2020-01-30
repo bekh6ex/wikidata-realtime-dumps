@@ -1,11 +1,11 @@
-use futures::future::{ready, FutureExt};
+use futures::future::{FutureExt, ready};
 use futures::stream::{iter, once, StreamExt};
 use futures::Stream;
 use log::*;
 use serde::Deserialize;
 
 use crate::archive::Initialization;
-use crate::events::{get_current_event_id, EventId};
+use crate::events::{EventId, get_current_event_id};
 use crate::get_entity::GetEntityClient;
 use crate::http_client::{create_client, get_json};
 use crate::init::dumps::get_dump_stream;
@@ -18,13 +18,25 @@ pub async fn init(
     ty: EntityType,
     start_id: Option<EntityId>,
 ) -> impl Stream<Item = Initialization> {
-    let init_end_stream = once(ready(Initialization::Finished));
+    let end_id = get_latest_entity_id(ty).await;
 
-    let latest_id = get_latest_entity_id(ty).await;
     let safety_offset = 100;
 
+    let end_id = ty.id(end_id.n() + safety_offset);
+
+    init_inner(ty, start_id, end_id).await
+}
+
+pub async fn init_inner(
+    ty: EntityType,
+    start_id: Option<EntityId>,
+    end_id: EntityId
+) -> impl Stream<Item = Initialization> {
+
+    let init_end_stream = once(ready(Initialization::Finished));
+
     let min = start_id.map(|i| i.n()).unwrap_or(1);
-    let max = latest_id.n() + safety_offset;
+    let max = end_id.n();
 
     let client = GetEntityClient::default();
 
@@ -147,14 +159,46 @@ impl QueryResponse {
 
 #[cfg(test)]
 mod test {
-    use std::collections::BTreeSet;
+    use super::*;
+    use std::collections::{BTreeSet, VecDeque};
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Mutex;
 
+    use futures::*;
     use futures::future::ready;
     use futures::StreamExt;
-    use futures::*;
     use hyper::{Body, Client, Request};
+
+    #[actix_rt::test]
+    #[test]
+    async fn test_init_stream_order() {
+        let ty = EntityType::Property;
+        let id = ty.id(3038);
+
+        let stream = init_inner(ty, Some(id), id).await;
+
+        let mut messages = stream.collect::<VecDeque<_>>().await;
+
+        assert_eq!(messages.len(), 3);
+        let start = messages.pop_front().unwrap();
+        let finished = messages.pop_back().unwrap();
+        let update = messages.pop_front().unwrap();
+
+        match start {
+            Initialization::Start(_) => {},
+            _ => panic!("Not Start"),
+        }
+        match finished {
+            Initialization::Finished => {},
+            _ => panic!("Not Finished"),
+        }
+        match update {
+            Initialization::UpdateEntity(entity) => {
+                assert_eq!(entity.id, id)
+            },
+            _ => panic!("Not Finished"),
+        }
+    }
 
     //    #[actix_rt::test]
     //    #[test]
