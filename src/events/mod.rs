@@ -95,12 +95,13 @@ pub async fn update_command_stream(
         .filter_map(move |event: ProperEvent| {
             let ProperEvent { id: event_id, data } = event;
             let client = client_for_entities.clone();
-            let EventData { title, .. } = data;
+            let EventData { title, revision, .. } = data;
+            // TODO: Figure out which events have which revisions
+            let revision_id = revision.map(|r| RevisionId(r.new));
             let id = ty.parse_from_title(&title).unwrap();
             async move {
                 // TODO: Handle new and deleted
-                // TODO: Figure out which events have which revisions
-                let entity = client.get_entity(id).await?;
+                let entity = client.get_entity(id, revision_id).await?;
                 Some(UpdateCommand { event_id, entity })
             }
         })

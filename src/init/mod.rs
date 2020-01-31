@@ -62,7 +62,7 @@ pub async fn init_inner(
         let client = client.clone();
 
         let joined = JoinStreams::new(id_stream, dump_stream, move |id: EntityId| {
-            client.get_entity(id)
+            client.get_entity(id, None)
         });
 
         (dump_event_id, joined)
@@ -72,7 +72,7 @@ pub async fn init_inner(
         let current = get_current_event_id().await;
         let client = client.clone();
         let id_stream = id_stream(min, max, ty);
-        let entity_stream = id_stream.map(move |id| client.get_entity(id).left_future());
+        let entity_stream = id_stream.map(move |id| client.get_entity(id, None).left_future());
 
         (current, entity_stream)
     };
@@ -227,7 +227,6 @@ mod test {
         let inner = stream.into_async_read();
         let stream = FramedRead::new(inner, LinesCodec {});
 
-        use serde::Deserialize;
         #[derive(Deserialize)]
         struct Entity {
             id: String,

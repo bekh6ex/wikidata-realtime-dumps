@@ -14,7 +14,6 @@ use serde::Deserialize;
 use continuous_download::ContinuousDownloadStream;
 use sorted_stream::BufferedSortedStream;
 
-use crate::events::EventId;
 use crate::http_client::create_client;
 use crate::prelude::*;
 

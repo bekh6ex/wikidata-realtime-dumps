@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-#![type_length_limit = "1321428"]
+#![type_length_limit = "1325538"]
 #![warn(unused_extern_crates)]
 
 use std::collections::BTreeMap;
@@ -13,7 +13,7 @@ use log::*;
 
 use crate::archive::UpdateCommand;
 use crate::archive::{Archivarius, QueryState};
-use crate::events::{get_current_event_id, update_command_stream, EventId};
+use crate::events::{update_command_stream, EventId};
 use crate::prelude::EntityType;
 
 use self::archive::{start, ArchivariusMap};

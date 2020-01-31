@@ -33,12 +33,11 @@ impl GetEntityClient {
         }
     }
 
-    // TODO: Handle revision ID
-    pub fn get_entity(&self, id: EntityId) -> impl Future<Output = Option<SerializedEntity>> {
+    pub fn get_entity(&self, id: EntityId, revision_id: Option<RevisionId>) -> impl Future<Output = Option<SerializedEntity>> {
         let this = self.clone();
 
         let get_this_entity = move || {
-            this.clone().get_entity_internal(id, None).map(
+            this.clone().get_entity_internal(id, revision_id).map(
                 |r: Result<Option<GetEntityResult>, Error>| {
                     r.map_err(|e| {
                         match &e {
@@ -191,7 +190,7 @@ mod test {
             .map(move |id| {
                 let client = client.clone();
                 info!("Get entity {:?}", id);
-                client.get_entity(id)
+                client.get_entity(id, None)
             })
             .buffered(50)
             .enumerate()
