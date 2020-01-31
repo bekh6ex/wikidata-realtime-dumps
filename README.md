@@ -7,7 +7,7 @@ Storing the state of Wikidata and updating it in "real-time" so every one can do
   * Entities in dump will always be sorted. `Q1` always comes before `Q8`.
   
   * The data in the dump might be (and probably will be) inconsistent. Entities that are later in dump
-    will have more recent versions that the one that are in the beginning. This happens 
+    will have more recent versions than the one that are in the beginning. This happens 
     because the response is being streamed by pieces (Volumes) and consistency exists within one volume only.
     Also, although some the entities will be created in Wikidata during the download, they might not be present in the
     downloaded dump, due to technical reasons. 
