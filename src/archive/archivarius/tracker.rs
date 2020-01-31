@@ -18,6 +18,10 @@ where
         }
     }
 
+    fn is_everything_persisted(&self) -> bool {
+        self.pending.is_empty()
+    }
+
     fn mark_pending(&mut self, id: Id) {
         if let Some(max) = &self.max_persisted {
             if id < *max {
@@ -70,6 +74,8 @@ pub trait HasPrevious {
 #[cfg(test)]
 mod tests {
     use crate::archive::archivarius::tracker::{HasPrevious, Tracker};
+    use proptest::prelude::*;
+    use proptest_attr_macro as pt;
 
     #[test]
     fn has_no_persisted_items_when_just_initialized() {
@@ -147,13 +153,46 @@ mod tests {
         tracker.mark_pending(1);
         assert_eq!(tracker.last_persisted_for_sure(), Some(0));
     }
+    #[test]
+    fn is_everything_persisted_variants() {
+        let mut tracker = Tracker::new();
+        tracker.mark_pending(2);
+
+        assert!(!tracker.is_everything_persisted());
+
+        tracker.mark_persisted(2);
+        assert!(tracker.is_everything_persisted());
+    }
+
+
+    #[pt::proptest]
+    fn persistence_order_does_not_matter(items: Vec<i32>, initial: u64, increment: u64) {
+        use rand::prelude::*;
+        use rand::rngs::mock::StepRng;
+        let mut items= items;
+        let mut rng = StepRng::new(initial, increment);
+
+        let mut tracker = Tracker::new();
+
+        for i in &items {
+            tracker.mark_pending(*i);
+        }
+
+        items.shuffle(&mut rng);
+
+        for i in &items {
+            tracker.mark_persisted(*i);
+        }
+
+        let max: Option<i32> = items.iter().max().map(|x| *x);
+
+        prop_assert_eq!(tracker.last_persisted_for_sure(), max);
+        prop_assert_eq!(tracker.is_everything_persisted(), true);
+    }
 
     impl HasPrevious for i32 {
         fn previous(&self) -> Self {
             self - 1
         }
     }
-
-    // TODO: proptest: take bunch of items, add them as pending, reshuffle the array
-    //       take the max element of those and check that max_persisted() equals that element
 }
