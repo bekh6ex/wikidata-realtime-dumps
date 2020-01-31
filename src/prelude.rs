@@ -80,7 +80,7 @@ impl EntityType {
 #[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EntityId {
     ty: EntityType,
-    id: u32, //TODO: Use non-zero type
+    id: u32,
 }
 
 impl EntityId {

@@ -56,7 +56,6 @@ pub fn get_json<'a, T: Deserialize<'a>>(
         if response.status() == StatusCode::NOT_FOUND {
             return Ok(None);
         } else if response.status() == StatusCode::TOO_MANY_REQUESTS {
-            // TODO: Maybe handle 'retry-after' header in response
             return Err(Error::TooManyRequests);
         }
 
