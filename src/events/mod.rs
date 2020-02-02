@@ -108,7 +108,7 @@ pub async fn update_command_stream(
         .enumerate()
         .map(move |(i, e)| {
             if i % 10usize == 0 {
-                info!("Walked {} events for {:?}", i + 1, ty);
+                info!("Walked {} events for {:?}. Current: {:?}", i + 1, ty, e.event_id);
             }
             e
         })
