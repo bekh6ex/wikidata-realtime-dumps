@@ -47,7 +47,7 @@ stream_throttle = { git="https://github.com/bekh6ex/stream-throttle.git", branch
 [dev-dependencies]
 futures-test = "0.3.1"
 proptest = "0.9.5"
-proptest-attr-macro = {path = "../proptest-attr-macro"}
+proptest-attr-macro = "0.1.0"
 
 [dev-dependencies.async-std]
 version = "1.4.0"
