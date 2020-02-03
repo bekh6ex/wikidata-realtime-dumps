@@ -1,20 +1,22 @@
+use std::cmp::Ordering;
+use std::pin::Pin;
 use std::time::Duration;
 
+use futures::{Future, FutureExt, Stream, StreamExt};
 use futures::future::ready;
 use futures::stream::once;
-use futures::{Stream, StreamExt};
 use log::*;
 use serde::{Deserialize, Serialize};
 use sse_codec::Event;
 
+use sorted_stream::BufferedSortedStream;
+use sorted_stream::Sequential;
+
 use crate::archive::UpdateCommand;
+use crate::events::event_stream::response_to_stream;
 use crate::get_entity::GetEntityClient;
 
 use super::prelude::*;
-use crate::events::event_stream::response_to_stream;
-use sorted_stream::BufferedSortedStream;
-use sorted_stream::Sequential;
-use std::cmp::Ordering;
 
 mod event_stream;
 
@@ -48,6 +50,12 @@ const WIKIDATA: &str = "wikidatawiki";
 ///       Lexemes: `cat event-stream | grep -F '"wiki":"wikidatawiki"' | grep -F '"uri":"https://www.wikidata.org/wiki/Lexeme:L' | grep -F '"namespace":146' | wc -l`
 ///
 
+
+// data: {"$schema":"/mediawiki/recentchange/1.0.0","meta":{"uri":"https://www.wikidata.org/wiki/Q26212910","request_id":"XjbM6gpAED4AAB3XDaAAAAAJ","id":"c36d0a88-6bee-4d40-b5c9-18e35d2e0678","dt":"2020-02-02T13:21:46Z","domain":"www.wikidata.org","stream":"mediawiki.recentchange","topic":"eqiad.mediawiki.recentchange","partition":0,"offset":2146136449},"id":1146589785,"type":"edit","namespace":0,"title":"Q26212910","comment":"/* wbmergeitems-to:0||Q1216649 */ [[MediaWiki:Gadget-Merge.js|merge.js]]  duplicate entry","timestamp":1580649706,"user":"Timár Péter","bot":false,"minor":false,"patrolled":false,"length":{"old":4197,"new":159},"revision":{"old":824457921,"new":1108532037},"server_url":"https://www.wikidata.org","server_name":"www.wikidata.org","server_script_path":"/w","wiki":"wikidatawiki","parsedcomment":"‎<span dir=\"auto\"><span class=\"autocomment\">Elem összevonása ide: Q1216649: </span></span> <a href=\"/wiki/MediaWiki:Gadget-Merge.js\" title=\"MediaWiki:Gadget-Merge.js\">merge.js</a>  duplicate entry"}
+//
+//data: {"$schema":"/mediawiki/recentchange/1.0.0","meta":{"uri":"https://www.wikidata.org/wiki/Q1216649","request_id":"XjbM6gpAED4AAB3XDaAAAAAJ","id":"92118634-a7b9-4509-9a9c-765cce0d1d89","dt":"2020-02-02T13:21:46Z","domain":"www.wikidata.org","stream":"mediawiki.recentchange","topic":"eqiad.mediawiki.recentchange","partition":0,"offset":2146136451},"id":1146589786,"type":"edit","namespace":0,"title":"Q1216649","comment":"/* wbmergeitems-from:0||Q26212910 */ [[MediaWiki:Gadget-Merge.js|merge.js]]  duplicate entry","timestamp":1580649706,"user":"Timár Péter","bot":false,"minor":false,"patrolled":false,"length":{"old":1771,"new":5328},"revision":{"old":812858579,"new":1108532043},"server_url":"https://www.wikidata.org","server_name":"www.wikidata.org","server_script_path":"/w","wiki":"wikidatawiki","parsedcomment":"‎<span dir=\"auto\"><span class=\"autocomment\">Elem összevonása innen: Q26212910: </span></span> <a href=\"/wiki/MediaWiki:Gadget-Merge.js\" title=\"MediaWiki:Gadget-Merge.js\">merge.js</a>  duplicate entry"}
+//
+//data: {"$schema":"/mediawiki/recentchange/1.0.0","meta":{"uri":"https://www.wikidata.org/wiki/Q26212910","request_id":"XjbM6gpAED4AAB3XDaAAAAAJ","id":"89a15a25-e60c-4b91-b985-05d232d23613","dt":"2020-02-02T13:21:46Z","domain":"www.wikidata.org","stream":"mediawiki.recentchange","topic":"eqiad.mediawiki.recentchange","partition":0,"offset":2146136453},"id":1146589787,"type":"edit","namespace":0,"title":"Q26212910","comment":"/* wbcreateredirect:0||Q26212910|Q1216649 */","timestamp":1580649706,"user":"Timár Péter","bot":false,"minor":false,"patrolled":false,"length":{"old":159,"new":65},"revision":{"old":1108532037,"new":1108532044},"server_url":"https://www.wikidata.org","server_name":"www.wikidata.org","server_script_path":"/w","wiki":"wikidatawiki","parsedcomment":"‎<span dir=\"auto\"><span class=\"autocomment\">Átirányítás ide: Q1216649</span></span>"}
 pub async fn get_current_event_id() -> EventId {
     // TODO Should be not current but the one before that.
 
@@ -80,31 +88,16 @@ pub async fn update_command_stream(
 ) -> impl Stream<Item = UpdateCommand> {
     let client_for_entities = GetEntityClient::default();
 
-    get_proper_event_stream(Some(event_id))
+    get_wikidata_event_stream(Some(event_id), ty)
         .await
-        .filter(move |e: &ProperEvent| {
-            ready(e.data.wiki == WIKIDATA && e.data.namespace == ty.namespace().n())
-        })
-        .inspect(|e| {
-            let known: Vec<&str> = vec!["edit"];
-
-            if !known.contains(&&e.data.event_type[..]) {
-                info!("Unknown event type '{}'", e.data.event_type);
-            }
-        })
         .filter_map(move |event: ProperEvent| {
-            let ProperEvent { id: event_id, data } = event;
             let client = client_for_entities.clone();
-            let EventData { title, revision, .. } = data;
-            // TODO: Figure out which events have which revisions
-            let revision_id = revision.map(|r| RevisionId(r.new));
-            let id = ty.parse_from_title(&title).unwrap();
             async move {
-                // TODO: Handle new and deleted
-                let entity = client.get_entity(id, revision_id).await?;
-                Some(UpdateCommand { event_id, entity })
+                event.into_command(client, ty)
+                // TODO Add logging
             }
         })
+        .buffered(10)
         .enumerate()
         .map(move |(i, e)| {
             if i % 10usize == 0 {
@@ -133,7 +126,7 @@ async fn get_top_event_id(from: Option<EventId>) -> EventId {
     id.unwrap()
 }
 
-async fn get_proper_event_stream(event_id: Option<EventId>) -> impl Stream<Item = ProperEvent> {
+async fn get_wikidata_event_stream(event_id: Option<EventId>, ty: EntityType) -> impl Stream<Item=ProperEvent> {
     let stream = continuous_stream::ContinuousStream::new(
         move |id| {
             let id = id.or_else(|| event_id.clone().map(|i| i.to_json_string()));
@@ -150,16 +143,23 @@ async fn get_proper_event_stream(event_id: Option<EventId>) -> impl Stream<Item 
         1000,
     );
 
-    let stream = stream.chunks(2).map(|ch: Vec<Event>| {
+    let stream = stream.chunks(2).filter_map(move |ch: Vec<Event>| {
         let s = ch.as_slice();
 
         match s {
             [Event::LastEventId { id }, Event::Message { data, .. }] => {
-                let data = serde_json::from_str(&data).unwrap();
-                ProperEvent {
-                    id: EventId::new(id.clone()),
-                    data,
-                }
+                let hint: EventDataHint = serde_json::from_str(&data).unwrap();
+                let result = if hint.wiki == WIKIDATA && hint.namespace == ty.namespace().n() {
+                    let data: EventData2 = serde_json::from_str(&data).unwrap();
+                    Some(ProperEvent {
+                        id: EventId::new(id.clone()),
+                        data,
+                    })
+                } else {
+                    None
+                };
+
+                ready(result)
             }
             _ => panic!(),
         }
@@ -168,9 +168,21 @@ async fn get_proper_event_stream(event_id: Option<EventId>) -> impl Stream<Item 
     BufferedSortedStream::new(stream.fuse(), 100)
 }
 
+#[derive(Debug, Deserialize)]
+struct EventDataHint {
+    wiki: String,
+    namespace: i64, // Has to be signed because `-1` is namespace for Special pages
+}
+
 struct ProperEvent {
     id: EventId,
-    data: EventData,
+    data: EventData2,
+}
+
+impl ProperEvent {
+    fn into_command(self, client: GetEntityClient, ty: EntityType) -> Option<Pin<Box<dyn Future<Output=UpdateCommand>>>> {
+        self.data.to_command(client, ty, self.id)
+    }
 }
 
 impl Sequential for ProperEvent {
@@ -263,17 +275,69 @@ struct SerializedEventIdPart {
     timestamp: Option<u64>,
     offset: Option<i8>,
 }
+
 mod continuous_stream;
 
 #[derive(Deserialize, Debug, PartialEq)]
-struct EventData {
-    wiki: String,
-    title: String,
-    #[serde(rename(deserialize = "type"))]
-    event_type: String,
-    // Has to be signed because `-1` is namespace for Special pages
-    namespace: i64,
-    revision: Option<RevisionData>,
+#[serde(tag = "type")]
+enum EventData2 {
+    #[serde(rename(deserialize = "edit"))]
+    Edit {
+        title: String,
+        revision: RevisionData,
+    },
+    #[serde(rename(deserialize = "new"))]
+    New {
+        title: String,
+        revision: RevisionData,
+    },
+    #[serde(rename(deserialize = "log"))]
+    Log {
+        title: String,
+    },
+}
+
+impl EventData2 {
+    fn to_command(&self, client: GetEntityClient, ty: EntityType, event_id: EventId) -> Option<Pin<Box<dyn Future<Output=UpdateCommand>>>> {
+        match self {
+            EventData2::Edit { title, revision, .. } => {
+                // TODO Handle delete, which is edit with "comment":"/* wbcreateredirect:0||Q26212910|Q1216649 */"
+                let revision_id = RevisionId(revision.new);
+                let id = ty.parse_from_title(title).unwrap();
+
+                let serialized_entity_fut = client.get_entity(id, Some(revision_id));
+                let command_fut = serialized_entity_fut
+                    .map(move |o: Option<SerializedEntity>| {
+                        let serialized_entity = o.unwrap_or_else(|| panic!("Not found: {:?} {:?}", id, revision_id));
+                        UpdateCommand {
+                            event_id,
+                            entity: serialized_entity,
+                        }
+                    });
+
+                Some(Box::pin(command_fut))
+            },
+            EventData2::New { title, revision, .. } => {
+                let revision_id = RevisionId(revision.new);
+                let id = ty.parse_from_title(title).unwrap();
+
+                let serialized_entity_fut = client.get_entity(id, Some(revision_id));
+                let command_fut = serialized_entity_fut
+                    .map(move |o: Option<SerializedEntity>| {
+                        let serialized_entity = o.unwrap_or_else(|| panic!("Should always present. Not found: {:?} {:?}", id, revision_id));
+                        UpdateCommand {
+                            event_id,
+                            entity: serialized_entity,
+                        }
+                    });
+
+                Some(Box::pin(command_fut))
+            },
+            EventData2::Log { .. } => {
+                None
+            },
+        }
+    }
 }
 
 #[derive(Deserialize, Debug, PartialEq)]
@@ -288,13 +352,16 @@ struct WikidataResponse {
 
 #[cfg(test)]
 mod test {
+    use std::time::Duration;
+
     use actix_rt;
     use futures::StreamExt;
+    use serde_json;
 
-    use crate::events::{get_proper_event_stream, EventData, EventId};
+    use crate::events::{EventId, get_wikidata_event_stream};
 
+    use super::*;
     use super::get_top_event_id;
-    use std::time::Duration;
 
     //    #[actix_rt::test]
     #[allow(dead_code)]
@@ -309,15 +376,83 @@ mod test {
         assert_eq!(data1, data2);
     }
 
-    async fn get_top_event_data(from: EventId) -> EventData {
-        let stream = get_proper_event_stream(Some(from)).await;
+    async fn get_top_event_data(from: EventId) -> EventData2 {
+        let stream = get_wikidata_event_stream(Some(from), EntityType::Item).await;
         let event = stream.take(1).collect::<Vec<_>>().await.remove(0);
         event.data
     }
 
     #[actix_rt::test]
     async fn smoketest_get_proper_event_stream() {
-        let stream = get_proper_event_stream(None).await;
+        let event_id = EventId::new(r#"[{
+                                                        "topic": "codfw.mediawiki.recentchange",
+                                                        "partition": 0,
+                                                        "offset": -1
+                                                      },
+                                                      {
+                                                        "topic": "eqiad.mediawiki.recentchange",
+                                                        "partition": 0,
+                                                        "timestamp": 1579465255001
+                                                      }]"#.to_owned());
+
+        let stream = get_wikidata_event_stream(Some(event_id), EntityType::Item).await;
         let _event = stream.take(1).collect::<Vec<_>>().await.remove(0);
+    }
+
+    #[test]
+    fn test_event_data_edit_deserialization() {
+        let event_data = r#"{"$schema":"/mediawiki/recentchange/1.0.0","meta":{"uri":"https://www.wikidata.org/wiki/Q26212910","request_id":"XjbM6gpAED4AAB3XDaAAAAAJ","id":"89a15a25-e60c-4b91-b985-05d232d23613","dt":"2020-02-02T13:21:46Z","domain":"www.wikidata.org","stream":"mediawiki.recentchange","topic":"eqiad.mediawiki.recentchange","partition":0,"offset":2146136453},"id":1146589787,"type":"edit","namespace":0,"title":"Q26212910","comment":"/* wbcreateredirect:0||Q26212910|Q1216649 */","timestamp":1580649706,"user":"Timár Péter","bot":false,"minor":false,"patrolled":false,"length":{"old":159,"new":65},"revision":{"old":1108532037,"new":1108532044},"server_url":"https://www.wikidata.org","server_name":"www.wikidata.org","server_script_path":"/w","wiki":"wikidatawiki","parsedcomment":"‎<span dir=\"auto\"><span class=\"autocomment\">Átirányítás ide: Q1216649</span></span>"}"#;
+
+        let result = serde_json::from_str::<EventData2>(event_data).unwrap();
+
+        match result {
+            EventData2::Edit {
+                title,
+                revision
+            } => {
+                assert_eq!(title, "Q26212910");
+                assert_eq!(revision.new, 1108532044);
+            },
+            ed => {
+                panic!("Unexpected type: {:?}", ed)
+            },
+        }
+    }
+
+    #[test]
+    fn test_event_data_log_deserialization() {
+        let event_data = r#"{"$schema":"/mediawiki/recentchange/1.0.0","meta":{"uri":"https://www.wikidata.org/wiki/Q881745","request_id":"XjbJEwpAAEgAAIDSKEEAAAEX","id":"1b9134f7-8448-41b7-ac30-6be5acdadcc9","dt":"2020-02-02T13:05:24Z","domain":"www.wikidata.org","stream":"mediawiki.recentchange","topic":"eqiad.mediawiki.recentchange","partition":0,"offset":2146109409},"type":"log","namespace":0,"title":"Q881745","comment":"","timestamp":1580648724,"user":"2A01:E0A:1C8:9A00:F0C3:F1E2:400B:11B2","bot":false,"log_id":0,"log_type":"abusefilter","log_action":"hit","log_params":{"action":"edit","filter":79,"actions":"tag","log":11639581},"log_action_comment":"2A01:E0A:1C8:9A00:F0C3:F1E2:400B:11B2 triggered [[Special:AbuseFilter/79|filter 79]], performing the action \"edit\" on [[Q881745]]. Actions taken: Tag ([[Special:AbuseLog/11639581|details]])","server_url":"https://www.wikidata.org","server_name":"www.wikidata.org","server_script_path":"/w","wiki":"wikidatawiki","parsedcomment":""}"#;
+
+        let result = serde_json::from_str::<EventData2>(event_data).unwrap();
+
+        match result {
+            EventData2::Log {
+                title,
+            } => {
+                assert_eq!(title, "Q881745");
+            },
+            ed => {
+                panic!("Unexpected type: {:?}", ed)
+            },
+        }
+    }
+
+    #[test]
+    fn test_event_data_new_deserialization() {
+        let event_data = r#"{"$schema":"/mediawiki/recentchange/1.0.0","meta":{"uri":"https://www.wikidata.org/wiki/Q84233913","request_id":"XjbJAQpAAEoAAA5tji4AAADT","id":"985211a0-516d-49cb-a40a-595820485d73","dt":"2020-02-02T13:05:06Z","domain":"www.wikidata.org","stream":"mediawiki.recentchange","topic":"eqiad.mediawiki.recentchange","partition":0,"offset":2146108941},"id":1146579094,"type":"new","namespace":0,"title":"Q84233913","comment":"/* wbeditentity-create-item:0| */","timestamp":1580648706,"user":"LargeDatasetBot","bot":true,"minor":false,"patrolled":true,"length":{"new":18711},"revision":{"new":1108521371},"server_url":"https://www.wikidata.org","server_name":"www.wikidata.org","server_script_path":"/w","wiki":"wikidatawiki","parsedcomment":"‎<span dir=\"auto\"><span class=\"autocomment\">Created a new Item</span></span>"}"#;
+
+        let result = serde_json::from_str::<EventData2>(event_data).unwrap();
+
+        match result {
+            EventData2::New {
+                title, revision
+            } => {
+                assert_eq!(title, "Q84233913");
+                assert_eq!(revision.new, 1108521371);
+            },
+            ed => {
+                panic!("Unexpected type: {:?}", ed)
+            },
+        }
     }
 }

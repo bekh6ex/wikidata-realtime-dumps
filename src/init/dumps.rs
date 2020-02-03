@@ -109,6 +109,7 @@ async fn json_stream(dump_url: String) -> impl Stream<Item = String> {
     let inner = stream.into_async_read();
     let stream = FramedRead::new(inner, LinesCodec {});
 
+    // TODO: Handle last line "]\n"
     stream
         .skip(1) //First line is always "[\n"
         .map(|r| r.expect("Dump response stream terminated"))

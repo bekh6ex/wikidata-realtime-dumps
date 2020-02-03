@@ -38,6 +38,16 @@ pub(super) fn response_to_stream(
                 }
             }
         })
+        .filter(|v| {
+            let s = v.as_slice();
+            match s {
+                [Event::LastEventId { .. }, Event::Message { .. }] => ready(true),
+                _ => {
+                    info!("Stopping stream. Wrong set of messages: {:?}", v);
+                    ready(false)
+                }
+            }
+        })
         .map(futures::stream::iter)
         .flatten();
 
