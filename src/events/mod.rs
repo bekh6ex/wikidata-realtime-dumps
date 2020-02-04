@@ -17,6 +17,7 @@ use crate::events::event_stream::response_to_stream;
 use crate::get_entity::GetEntityClient;
 
 use super::prelude::*;
+use crate::init::DumpFormat::SortedJsonLines;
 
 mod event_stream;
 
@@ -159,29 +160,38 @@ async fn get_wikidata_event_stream(
         1000,
     );
 
-    let stream = stream.chunks(2).filter_map(move |ch: Vec<Event>| {
+    let stream = stream.chunks(2).map(|ch: Vec<Event>| {
         let s = ch.as_slice();
 
         match s {
-            [Event::LastEventId { id }, Event::Message { data, .. }] => {
-                let hint: EventDataHint = serde_json::from_str(&data).unwrap();
-                let result = if hint.wiki == WIKIDATA && hint.namespace == ty.namespace().n() {
-                    let data: EventData = serde_json::from_str(&data).unwrap();
-                    Some(ProperEvent {
-                        id: EventId::new(id.clone()),
-                        data,
-                    })
-                } else {
-                    None
-                };
-
-                ready(result)
-            }
+            [Event::LastEventId { id }, Event::Message { data, .. }] => SortableEvent {
+                id: EventId::new(id.clone()),
+                data: data.clone(),
+            },
             _ => panic!(),
         }
     });
+    let sorted_stream = BufferedSortedStream::new(stream.fuse(), 30);
 
-    BufferedSortedStream::new(stream.fuse(), 100)
+    sorted_stream.filter_map(move |event: SortableEvent| {
+        let hint: EventDataHint = serde_json::from_str(&event.data).unwrap();
+        let result = if hint.wiki == WIKIDATA && hint.namespace == ty.namespace().n() {
+            let data: EventData = serde_json::from_str(&event.data).unwrap();
+            Some(ProperEvent {
+                id: event.id.clone(),
+                data,
+            })
+        } else {
+            None
+        };
+
+        ready(result)
+    })
+}
+
+struct SortableEvent {
+    id: EventId,
+    data: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -205,7 +215,7 @@ impl ProperEvent {
     }
 }
 
-impl Sequential for ProperEvent {
+impl Sequential for SortableEvent {
     type Marker = EventId;
 
     fn seq_marker(&self) -> Self::Marker {
