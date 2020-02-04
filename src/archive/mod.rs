@@ -83,6 +83,13 @@ impl UpdateChunkCommand {
             UpdateChunkCommand::Delete { revision, .. } => *revision,
         }
     }
+
+    fn message_type(&self) -> &str {
+        match self {
+            UpdateChunkCommand::Update { .. } => "Update",
+            UpdateChunkCommand::Delete { .. } => "Delete",
+        }
+    }
 }
 
 impl Message for UpdateChunkCommand {

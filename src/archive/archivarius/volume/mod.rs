@@ -75,7 +75,12 @@ impl VolumeKeeper {
                     if entities.contains_key(&msg.entity_id()) {
                         let current_revision = entities.get(&msg.entity_id()).unwrap().revision;
                         if current_revision > msg.revision() {
-                            warn!("Current revision is newer than one in command. {:?}", msg);
+                            warn!(
+                                "Current revision is newer than one in command. {} {:?} {:?}",
+                                msg.message_type(),
+                                msg.entity_id(),
+                                msg.revision()
+                            );
                         } else {
                             match msg {
                                 UpdateChunkCommand::Update { entity } => {
@@ -196,14 +201,6 @@ impl Handler<WriteDown> for VolumeKeeper {
         let _ids: BTreeSet<EntityId> = buffer.iter().map(|uc| uc.entity_id()).collect();
 
         self.apply_changes(buffer);
-
-        // finish 1580850337001
-        // pre-start 1580850586001
-        // start     1580850608001
-
-        // last processed 1580647906001
-        // pre            1580850836001
-        // start          1580850853001
 
         //        self.master.send(report)
     }
