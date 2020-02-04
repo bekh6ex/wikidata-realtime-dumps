@@ -97,7 +97,7 @@ pub async fn update_command_stream(
                 // TODO Add logging
             }
         })
-        .buffered(10)
+        .buffered(200)
         .enumerate()
         .map(move |(i, e): (usize, UpdateCommand)| {
             if i % 10usize == 0 {
