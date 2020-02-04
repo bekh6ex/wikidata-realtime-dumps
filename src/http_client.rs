@@ -57,6 +57,8 @@ pub fn get_json<'a, T: Deserialize<'a>>(
             return Ok(None);
         } else if response.status() == StatusCode::TOO_MANY_REQUESTS {
             return Err(Error::TooManyRequests);
+        } else if response.status() == StatusCode::BAD_REQUEST {
+            return Err(Error::BadRequest);
         }
 
         use bytes::buf::BufExt;
@@ -82,6 +84,7 @@ pub fn get_json<'a, T: Deserialize<'a>>(
 
 #[derive(Debug)]
 pub enum Error {
+    BadRequest,
     TooManyRequests,
     GetResponse(hyper::Error),
     ResponseFormat {

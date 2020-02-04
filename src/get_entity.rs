@@ -42,14 +42,18 @@ impl GetEntityClient {
 
         let get_this_entity = move || {
             this.clone().get_entity_internal(id, revision_id).map(
-                |r: Result<Option<GetEntityResult>, Error>| {
-                    r.map_err(|e| {
+                move |r: Result<Option<GetEntityResult>, Error>| {
+                    r.map_err(move |e| {
                         match &e {
                             Error::TooManyRequests => debug!("Too many requests"),
                             Error::GetResponse(e) => info!("Response error: {:?}", e),
                             Error::ResponseFormat { cause, body } => {
                                 warn!("Wrong response format: {:?}. Body: {}", cause, body)
                             }
+                            Error::BadRequest => panic!(
+                                "Got BadRequest. Should have been handled already. {:?} {:?}",
+                                id, revision_id
+                            ),
                         }
                         e
                     })
@@ -99,11 +103,20 @@ impl GetEntityClient {
             )
         };
 
-        let response = get_json::<SpecialEntityResponse>(self.client(), url).await?;
-        if response.is_none() {
-            return Ok(None);
-        }
-        let response = response.unwrap();
+        let response = get_json::<SpecialEntityResponse>(self.client(), url).await;
+        let response = match response {
+            Ok(None) => {
+                return Ok(None);
+            }
+            Err(Error::BadRequest) if rev.is_some() => {
+                // Some weired behaviour of Special:EntityData
+                return Ok(None);
+            }
+            Err(err) => {
+                return Err(err);
+            }
+            Ok(Some(response)) => response,
+        };
 
         // Entity might be a redirect to another one which will be automatically resolved.
         // The response will then contains some other entity which should be ignored.
