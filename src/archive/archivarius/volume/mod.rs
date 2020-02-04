@@ -72,14 +72,30 @@ impl VolumeKeeper {
         self.storage()
             .change(move |entities: &mut BTreeMap<EntityId, SerializedEntity>| {
                 for msg in commands {
-                    let new = msg.entity;
-
-                    if entities.contains_key(&new.id) {
-                        entities.remove(&new.id);
-                        // TODO: Check revision
-                        entities.insert(new.id, new);
+                    if entities.contains_key(&msg.entity_id()) {
+                        let current_revision = entities.get(&msg.entity_id()).unwrap().revision;
+                        if current_revision > msg.revision() {
+                            warn!("Current revision is newer than one in command. {:?}", msg);
+                        } else {
+                            match msg {
+                                UpdateChunkCommand::Update { entity } => {
+                                    entities.insert(entity.id, entity);
+                                }
+                                UpdateChunkCommand::Delete { id, revision: _ } => {
+                                    entities.remove(&id);
+                                }
+                            }
+                        }
                     } else {
-                        entities.insert(new.id, new);
+                        match msg {
+                            UpdateChunkCommand::Update { entity } => {
+                                entities.insert(entity.id, entity);
+                            }
+                            UpdateChunkCommand::Delete { id, revision } => warn!(
+                                "Expect to delete entity, but there is none. {:?} {:?}",
+                                id, revision
+                            ),
+                        }
                     }
                 }
             })
@@ -117,7 +133,8 @@ impl Handler<UpdateChunkCommand> for VolumeKeeper {
         //        }
         debug!(
             "UpdateCommand[actor_id={}]: entity_id={}",
-            self.i, msg.entity.id
+            self.i,
+            msg.entity_id()
         );
 
         //        self.command_buffer.push(msg.clone());
@@ -176,7 +193,7 @@ impl Handler<WriteDown> for VolumeKeeper {
         }
         let buffer = core::mem::replace(&mut self.command_buffer, vec![]);
 
-        let _ids: BTreeSet<EntityId> = buffer.iter().map(|uc| uc.entity.id).collect();
+        let _ids: BTreeSet<EntityId> = buffer.iter().map(|uc| uc.entity_id()).collect();
 
         self.apply_changes(buffer);
 

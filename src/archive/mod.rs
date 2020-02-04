@@ -30,9 +30,31 @@ impl Message for GetDump {
 
 // TODO: Split to UpdateFromEventCommand and Initialize(Entity)Command
 #[derive(Debug)]
-pub struct UpdateCommand {
-    pub event_id: EventId,
-    pub entity: SerializedEntity,
+pub enum UpdateCommand {
+    UpdateCommand {
+        event_id: EventId,
+        entity: SerializedEntity,
+    },
+    DeleteCommand {
+        event_id: EventId,
+        id: EntityId,
+        revision: RevisionId,
+    },
+}
+
+impl UpdateCommand {
+    pub fn entity_id(&self) -> EntityId {
+        match self {
+            UpdateCommand::UpdateCommand { entity, .. } => entity.id,
+            UpdateCommand::DeleteCommand { id, .. } => *id,
+        }
+    }
+    pub fn event_id(&self) -> &EventId {
+        match self {
+            UpdateCommand::UpdateCommand { event_id, .. } => event_id,
+            UpdateCommand::DeleteCommand { event_id, .. } => event_id,
+        }
+    }
 }
 
 impl Message for UpdateCommand {
@@ -41,9 +63,26 @@ impl Message for UpdateCommand {
 
 pub type UnitFuture = Pin<Box<dyn Future<Output = ()> + Send + Sync>>;
 
-#[derive(Clone)]
-pub struct UpdateChunkCommand {
-    pub entity: SerializedEntity,
+#[derive(Clone, Debug)]
+enum UpdateChunkCommand {
+    Update { entity: SerializedEntity },
+    Delete { id: EntityId, revision: RevisionId },
+}
+
+impl UpdateChunkCommand {
+    fn entity_id(&self) -> EntityId {
+        match self {
+            UpdateChunkCommand::Update { entity, .. } => entity.id,
+            UpdateChunkCommand::Delete { id, .. } => *id,
+        }
+    }
+
+    fn revision(&self) -> RevisionId {
+        match self {
+            UpdateChunkCommand::Update { entity, .. } => entity.revision,
+            UpdateChunkCommand::Delete { revision, .. } => *revision,
+        }
+    }
 }
 
 impl Message for UpdateChunkCommand {

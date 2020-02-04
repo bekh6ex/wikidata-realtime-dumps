@@ -241,8 +241,8 @@ impl Handler<UpdateCommand> for Archivarius {
     fn handle(&mut self, msg: UpdateCommand, ctx: &mut Self::Context) -> Self::Result {
         let self_addr = ctx.address();
 
-        debug!("UpdateCommand[ArchiveActor]: entity_id={}", msg.entity.id);
-        let id = msg.entity.id;
+        debug!("UpdateCommand[ArchiveActor]: entity_id={}", msg.entity_id());
+        let id = msg.entity_id();
 
         let (is_open_actor, child) = self.find_volume(id);
 
@@ -252,20 +252,39 @@ impl Handler<UpdateCommand> for Archivarius {
             self.last_id_to_open_actor = Some(id);
         }
 
-        let UpdateCommand { entity, event_id } = msg;
+        //        let UpdateCommand { entity, event_id } = msg;
 
-        let result: UnitFuture = Box::pin(async move {
-            let result = child.send(UpdateChunkCommand { entity });
+        let result: UnitFuture = match msg {
+            UpdateCommand::UpdateCommand { entity, event_id } => {
+                Box::pin(async move {
+                    let result = child.send(UpdateChunkCommand::Update { entity });
 
-            let size = result.await.expect("Communication with child failed");
+                    let size = result.await.expect("Communication with child failed");
 
-            // TODO: This is incorrect as soon as it is asynchronous.
-            self_addr.do_send(UpdateLastEventEventId(event_id));
+                    // TODO: This is incorrect as soon as it is asynchronous.
+                    self_addr.do_send(UpdateLastEventEventId(event_id));
 
-            if is_open_actor {
-                Self::maybe_close_the_open_volume(&self_addr, child, size);
+                    if is_open_actor {
+                        Self::maybe_close_the_open_volume(&self_addr, child, size);
+                    }
+                })
             }
-        });
+            UpdateCommand::DeleteCommand {
+                event_id,
+                id,
+                revision,
+            } => {
+                Box::pin(async move {
+                    let result = child.send(UpdateChunkCommand::Delete { id, revision });
+
+                    let _ = result.await.expect("Communication with child failed");
+
+                    // TODO: This is incorrect as soon as it is asynchronous.
+                    self_addr.do_send(UpdateLastEventEventId(event_id));
+                })
+            }
+        };
+
         MessageResult(result)
     }
 }
@@ -407,7 +426,7 @@ impl Handler<Initialization> for Archivarius {
                 }
 
                 let result: UnitFuture = Box::pin(async move {
-                    let result = child.send(UpdateChunkCommand { entity });
+                    let result = child.send(UpdateChunkCommand::Update { entity });
                     let size = result.await.expect("Communication with child failed");
 
                     if is_open_actor {
