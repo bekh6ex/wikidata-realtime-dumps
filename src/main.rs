@@ -129,9 +129,13 @@ async fn initialize(
 
     let response = actor.send(QueryState).await.expect("Failed commun");
 
-    response
+    let event_id = response
         .last_event_id
-        .expect("Archivarius does not seem to be initialized")
+        .expect("Archivarius does not seem to be initialized");
+
+    info!("Finished initialization. Next event: {:?}", event_id);
+
+    event_id
 }
 
 fn init_logger() {
