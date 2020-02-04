@@ -184,7 +184,7 @@ impl Archivarius {
     fn update_last_processed_event_id(&mut self, init_even_id: EventId) {
         info!(
             "Updating Archivarius for {:?} with last_processed_event_id = {:?}",
-            ty, init_even_id
+            self.ty, init_even_id
         );
         match &self.last_processed_event_id {
             None => {
@@ -202,7 +202,7 @@ impl Archivarius {
 
         info!(
             "Archivarius for {:?}: current last_processed_event_id = {:?}",
-            ty, self.last_processed_event_id
+            self.ty, self.last_processed_event_id
         );
 
         self.save_state();

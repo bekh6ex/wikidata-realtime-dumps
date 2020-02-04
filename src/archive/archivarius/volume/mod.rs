@@ -197,6 +197,14 @@ impl Handler<WriteDown> for VolumeKeeper {
 
         self.apply_changes(buffer);
 
+        // finish 1580850337001
+        // pre-start 1580850586001
+        // start     1580850608001
+
+        // last processed 1580647906001
+        // pre            1580850836001
+        // start          1580850853001
+
         //        self.master.send(report)
     }
 }
