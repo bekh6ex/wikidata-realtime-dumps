@@ -105,8 +105,13 @@ pub(super) fn start(types: Vec<EntityType>) -> ArchivariusMap {
     let arbiter_pool = ArbiterPool::new(actor_number);
 
     let tuples = types.iter().map(move |ty| {
-        let act = Archivarius::new(*ty, arbiter_pool.clone()).start();
-        (*ty, act)
+        let arbiter = Arbiter::new();
+        let ty = *ty;
+        let arbiter_pool = arbiter_pool.clone();
+        let act = Archivarius::start_in_arbiter(&arbiter, move |_| {
+            Archivarius::new(ty, arbiter_pool.clone())
+        });
+        (ty, act)
     });
 
     let map: BTreeMap<EntityType, Addr<Archivarius>> = BTreeMap::from_iter(tuples);
