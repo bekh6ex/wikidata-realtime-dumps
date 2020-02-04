@@ -35,6 +35,7 @@ pub(crate) struct Archivarius {
     last_id_to_open_actor: Option<EntityId>,
     arbiters: ArbiterPool,
     last_processed_event_id: Option<EventId>,
+    updates_received: u32,
     // initialized_up_to - last EntityId of persisted actor
 }
 
@@ -91,6 +92,7 @@ impl Archivarius {
             open_actor,
             last_id_to_open_actor,
             last_processed_event_id: state.last_processed_event_id,
+            updates_received: 0,
         }
     }
 
@@ -254,6 +256,11 @@ impl Handler<UpdateCommand> for Archivarius {
 
     fn handle(&mut self, msg: UpdateCommand, ctx: &mut Self::Context) -> Self::Result {
         let self_addr = ctx.address();
+        self.updates_received += 1;
+
+        if self.updates_received % 50 == 0 {
+            self.save_state();
+        }
 
         debug!("UpdateCommand[ArchiveActor]: entity_id={}", msg.entity_id());
         let id = msg.entity_id();
