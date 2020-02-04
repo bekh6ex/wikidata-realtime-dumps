@@ -1,11 +1,11 @@
-use futures::future::{FutureExt, ready};
+use futures::future::{ready, FutureExt};
 use futures::stream::{iter, once, StreamExt};
 use futures::Stream;
 use log::*;
 use serde::Deserialize;
 
 use crate::archive::Initialization;
-use crate::events::{EventId, get_current_event_id};
+use crate::events::{get_current_event_id, EventId};
 use crate::get_entity::GetEntityClient;
 use crate::http_client::{create_client, get_json};
 use crate::init::dumps::get_dump_stream;
@@ -30,9 +30,8 @@ pub async fn init(
 pub async fn init_inner(
     ty: EntityType,
     start_id: Option<EntityId>,
-    end_id: EntityId
+    end_id: EntityId,
 ) -> impl Stream<Item = Initialization> {
-
     let init_end_stream = once(ready(Initialization::Finished));
 
     let min = start_id.map(|i| i.n()).unwrap_or(1);
@@ -164,9 +163,9 @@ mod test {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Mutex;
 
-    use futures::*;
     use futures::future::ready;
     use futures::StreamExt;
+    use futures::*;
     use hyper::{Body, Client, Request};
 
     #[actix_rt::test]
@@ -185,17 +184,15 @@ mod test {
         let update = messages.pop_front().unwrap();
 
         match start {
-            Initialization::Start(_) => {},
+            Initialization::Start(_) => {}
             _ => panic!("Not Start"),
         }
         match finished {
-            Initialization::Finished => {},
+            Initialization::Finished => {}
             _ => panic!("Not Finished"),
         }
         match update {
-            Initialization::UpdateEntity(entity) => {
-                assert_eq!(entity.id, id)
-            },
+            Initialization::UpdateEntity(entity) => assert_eq!(entity.id, id),
             _ => panic!("Not Finished"),
         }
     }

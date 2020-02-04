@@ -33,7 +33,11 @@ impl GetEntityClient {
         }
     }
 
-    pub fn get_entity(&self, id: EntityId, revision_id: Option<RevisionId>) -> impl Future<Output = Option<SerializedEntity>> {
+    pub fn get_entity(
+        &self,
+        id: EntityId,
+        revision_id: Option<RevisionId>,
+    ) -> impl Future<Output = Option<SerializedEntity>> {
         let this = self.clone();
 
         let get_this_entity = move || {

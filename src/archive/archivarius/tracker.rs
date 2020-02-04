@@ -164,12 +164,11 @@ mod tests {
         assert!(tracker.is_everything_persisted());
     }
 
-
     #[pt::proptest]
     fn persistence_order_does_not_matter(items: Vec<i32>, initial: u64, increment: u64) {
         use rand::prelude::*;
         use rand::rngs::mock::StepRng;
-        let mut items= items;
+        let mut items = items;
         let mut rng = StepRng::new(initial, increment);
 
         let mut tracker = Tracker::new();

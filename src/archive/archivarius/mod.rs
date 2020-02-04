@@ -424,7 +424,6 @@ impl Handler<Initialization> for Archivarius {
     }
 }
 
-
 pub struct InitializationFinished;
 
 impl Message for InitializationFinished {

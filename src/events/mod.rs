@@ -2,9 +2,9 @@ use std::cmp::Ordering;
 use std::pin::Pin;
 use std::time::Duration;
 
-use futures::{Future, FutureExt, Stream, StreamExt};
 use futures::future::ready;
 use futures::stream::once;
+use futures::{Future, FutureExt, Stream, StreamExt};
 use log::*;
 use serde::{Deserialize, Serialize};
 use sse_codec::Event;
@@ -49,7 +49,6 @@ const WIKIDATA: &str = "wikidatawiki";
 ///       Properties: `cat event-stream | grep -F '"wiki":"wikidatawiki"' | grep -F '"uri":"https://www.wikidata.org/wiki/Property:P' | grep -F '"namespace":120' | wc -l`
 ///       Lexemes: `cat event-stream | grep -F '"wiki":"wikidatawiki"' | grep -F '"uri":"https://www.wikidata.org/wiki/Lexeme:L' | grep -F '"namespace":146' | wc -l`
 ///
-
 
 // data: {"$schema":"/mediawiki/recentchange/1.0.0","meta":{"uri":"https://www.wikidata.org/wiki/Q26212910","request_id":"XjbM6gpAED4AAB3XDaAAAAAJ","id":"c36d0a88-6bee-4d40-b5c9-18e35d2e0678","dt":"2020-02-02T13:21:46Z","domain":"www.wikidata.org","stream":"mediawiki.recentchange","topic":"eqiad.mediawiki.recentchange","partition":0,"offset":2146136449},"id":1146589785,"type":"edit","namespace":0,"title":"Q26212910","comment":"/* wbmergeitems-to:0||Q1216649 */ [[MediaWiki:Gadget-Merge.js|merge.js]]  duplicate entry","timestamp":1580649706,"user":"Timár Péter","bot":false,"minor":false,"patrolled":false,"length":{"old":4197,"new":159},"revision":{"old":824457921,"new":1108532037},"server_url":"https://www.wikidata.org","server_name":"www.wikidata.org","server_script_path":"/w","wiki":"wikidatawiki","parsedcomment":"‎<span dir=\"auto\"><span class=\"autocomment\">Elem összevonása ide: Q1216649: </span></span> <a href=\"/wiki/MediaWiki:Gadget-Merge.js\" title=\"MediaWiki:Gadget-Merge.js\">merge.js</a>  duplicate entry"}
 //
@@ -101,7 +100,12 @@ pub async fn update_command_stream(
         .enumerate()
         .map(move |(i, e)| {
             if i % 10usize == 0 {
-                info!("Walked {} events for {:?}. Current: {:?}", i + 1, ty, e.event_id);
+                info!(
+                    "Walked {} events for {:?}. Current: {:?}",
+                    i + 1,
+                    ty,
+                    e.event_id
+                );
             }
             e
         })
@@ -126,7 +130,10 @@ async fn get_top_event_id(from: Option<EventId>) -> EventId {
     id.unwrap()
 }
 
-async fn get_wikidata_event_stream(event_id: Option<EventId>, ty: EntityType) -> impl Stream<Item=ProperEvent> {
+async fn get_wikidata_event_stream(
+    event_id: Option<EventId>,
+    ty: EntityType,
+) -> impl Stream<Item = ProperEvent> {
     let stream = continuous_stream::ContinuousStream::new(
         move |id| {
             let id = id.or_else(|| event_id.clone().map(|i| i.to_json_string()));
@@ -180,7 +187,11 @@ struct ProperEvent {
 }
 
 impl ProperEvent {
-    fn into_command(self, client: GetEntityClient, ty: EntityType) -> Option<Pin<Box<dyn Future<Output=UpdateCommand>>>> {
+    fn into_command(
+        self,
+        client: GetEntityClient,
+        ty: EntityType,
+    ) -> Option<Pin<Box<dyn Future<Output = UpdateCommand>>>> {
         self.data.to_command(client, ty, self.id)
     }
 }
@@ -292,50 +303,59 @@ enum EventData2 {
         revision: RevisionData,
     },
     #[serde(rename(deserialize = "log"))]
-    Log {
-        title: String,
-    },
+    Log { title: String },
 }
 
 impl EventData2 {
-    fn to_command(&self, client: GetEntityClient, ty: EntityType, event_id: EventId) -> Option<Pin<Box<dyn Future<Output=UpdateCommand>>>> {
+    fn to_command(
+        &self,
+        client: GetEntityClient,
+        ty: EntityType,
+        event_id: EventId,
+    ) -> Option<Pin<Box<dyn Future<Output = UpdateCommand>>>> {
         match self {
-            EventData2::Edit { title, revision, .. } => {
+            EventData2::Edit {
+                title, revision, ..
+            } => {
                 // TODO Handle delete, which is edit with "comment":"/* wbcreateredirect:0||Q26212910|Q1216649 */"
                 let revision_id = RevisionId(revision.new);
                 let id = ty.parse_from_title(title).unwrap();
 
                 let serialized_entity_fut = client.get_entity(id, Some(revision_id));
-                let command_fut = serialized_entity_fut
-                    .map(move |o: Option<SerializedEntity>| {
-                        let serialized_entity = o.unwrap_or_else(|| panic!("Not found: {:?} {:?}", id, revision_id));
-                        UpdateCommand {
-                            event_id,
-                            entity: serialized_entity,
-                        }
-                    });
+                let command_fut = serialized_entity_fut.map(move |o: Option<SerializedEntity>| {
+                    let serialized_entity =
+                        o.unwrap_or_else(|| panic!("Not found: {:?} {:?}", id, revision_id));
+                    UpdateCommand {
+                        event_id,
+                        entity: serialized_entity,
+                    }
+                });
 
                 Some(Box::pin(command_fut))
-            },
-            EventData2::New { title, revision, .. } => {
+            }
+            EventData2::New {
+                title, revision, ..
+            } => {
                 let revision_id = RevisionId(revision.new);
                 let id = ty.parse_from_title(title).unwrap();
 
                 let serialized_entity_fut = client.get_entity(id, Some(revision_id));
-                let command_fut = serialized_entity_fut
-                    .map(move |o: Option<SerializedEntity>| {
-                        let serialized_entity = o.unwrap_or_else(|| panic!("Should always present. Not found: {:?} {:?}", id, revision_id));
-                        UpdateCommand {
-                            event_id,
-                            entity: serialized_entity,
-                        }
+                let command_fut = serialized_entity_fut.map(move |o: Option<SerializedEntity>| {
+                    let serialized_entity = o.unwrap_or_else(|| {
+                        panic!(
+                            "Should always present. Not found: {:?} {:?}",
+                            id, revision_id
+                        )
                     });
+                    UpdateCommand {
+                        event_id,
+                        entity: serialized_entity,
+                    }
+                });
 
                 Some(Box::pin(command_fut))
-            },
-            EventData2::Log { .. } => {
-                None
-            },
+            }
+            EventData2::Log { .. } => None,
         }
     }
 }
@@ -358,10 +378,10 @@ mod test {
     use futures::StreamExt;
     use serde_json;
 
-    use crate::events::{EventId, get_wikidata_event_stream};
+    use crate::events::{get_wikidata_event_stream, EventId};
 
-    use super::*;
     use super::get_top_event_id;
+    use super::*;
 
     //    #[actix_rt::test]
     #[allow(dead_code)]
@@ -384,7 +404,8 @@ mod test {
 
     #[actix_rt::test]
     async fn smoketest_get_proper_event_stream() {
-        let event_id = EventId::new(r#"[{
+        let event_id = EventId::new(
+            r#"[{
                                                         "topic": "codfw.mediawiki.recentchange",
                                                         "partition": 0,
                                                         "offset": -1
@@ -393,7 +414,9 @@ mod test {
                                                         "topic": "eqiad.mediawiki.recentchange",
                                                         "partition": 0,
                                                         "timestamp": 1579465255001
-                                                      }]"#.to_owned());
+                                                      }]"#
+            .to_owned(),
+        );
 
         let stream = get_wikidata_event_stream(Some(event_id), EntityType::Item).await;
         let _event = stream.take(1).collect::<Vec<_>>().await.remove(0);
@@ -406,16 +429,11 @@ mod test {
         let result = serde_json::from_str::<EventData2>(event_data).unwrap();
 
         match result {
-            EventData2::Edit {
-                title,
-                revision
-            } => {
+            EventData2::Edit { title, revision } => {
                 assert_eq!(title, "Q26212910");
                 assert_eq!(revision.new, 1108532044);
-            },
-            ed => {
-                panic!("Unexpected type: {:?}", ed)
-            },
+            }
+            ed => panic!("Unexpected type: {:?}", ed),
         }
     }
 
@@ -426,14 +444,10 @@ mod test {
         let result = serde_json::from_str::<EventData2>(event_data).unwrap();
 
         match result {
-            EventData2::Log {
-                title,
-            } => {
+            EventData2::Log { title } => {
                 assert_eq!(title, "Q881745");
-            },
-            ed => {
-                panic!("Unexpected type: {:?}", ed)
-            },
+            }
+            ed => panic!("Unexpected type: {:?}", ed),
         }
     }
 
@@ -444,15 +458,11 @@ mod test {
         let result = serde_json::from_str::<EventData2>(event_data).unwrap();
 
         match result {
-            EventData2::New {
-                title, revision
-            } => {
+            EventData2::New { title, revision } => {
                 assert_eq!(title, "Q84233913");
                 assert_eq!(revision.new, 1108521371);
-            },
-            ed => {
-                panic!("Unexpected type: {:?}", ed)
-            },
+            }
+            ed => panic!("Unexpected type: {:?}", ed),
         }
     }
 }
