@@ -108,11 +108,12 @@ pub async fn update_command_stream(
                 let lag = Duration::from_millis(current_timestamp - timestamp);
 
                 info!(
-                    "Walked {} events for {:?}. Current: {:?} lag = {:?}",
+                    "Walked {} events for {:?}. Current: {:?} lag = {:?}, timestamp = {:?}",
                     i + 1,
                     ty,
                     e.event_id(),
-                    lag
+                    lag,
+                    current_timestamp
                 );
             }
             e
