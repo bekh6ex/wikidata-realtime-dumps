@@ -14,9 +14,31 @@ use crate::stream_ext::join_streams::JoinStreams;
 
 mod dumps;
 
+#[derive(Clone, Debug)]
+pub struct DumpConfig {
+    pub url: String,
+    pub event_stream_start: EventId,
+    pub ty: EntityType,
+    pub archive_format: ArchiveFormat,
+    pub dump_format: DumpFormat,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum ArchiveFormat {
+    Bzip2,
+    Gzip,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum DumpFormat {
+    WikidataJsonArray,
+    SortedJsonLines,
+}
+
 pub async fn init(
     ty: EntityType,
     start_id: Option<EntityId>,
+    dump_config: Option<DumpConfig>,
 ) -> impl Stream<Item = Initialization> {
     let end_id = get_latest_entity_id(ty).await;
 
@@ -24,13 +46,14 @@ pub async fn init(
 
     let end_id = ty.id(end_id.n() + safety_offset);
 
-    init_inner(ty, start_id, end_id).await
+    init_inner(ty, start_id, end_id, dump_config).await
 }
 
 pub async fn init_inner(
     ty: EntityType,
     start_id: Option<EntityId>,
     end_id: EntityId,
+    dump_config: Option<DumpConfig>,
 ) -> impl Stream<Item = Initialization> {
     let init_end_stream = once(ready(Initialization::Finished));
 
@@ -41,30 +64,31 @@ pub async fn init_inner(
 
     debug!("Creating init stream for {:?}", ty);
 
-    let dump_pair = {
-        let dump_url = "https://dumps.wikimedia.org/other/wikibase/wikidatawiki/20200120/wikidata-20200120-all.json.bz2".to_owned();
-        // "2020-01-19T17:57:34.000Z"
-        let dump_event_id = "[{\"topic\":\"eqiad.mediawiki.recentchange\",\"partition\":0,\"timestamp\":1579456654000},{\"topic\":\"codfw.mediawiki.recentchange\",\"partition\":0,\"offset\":-1}]";
-        let dump_event_id = EventId::new(dump_event_id.to_owned());
-        let id_stream = id_stream(min, max, ty);
-        let dump_stream =
-            get_dump_stream(ty, dump_url)
-                .await
-                .enumerate()
-                .filter_map(move |(i, e)| {
-                    let process = e.id.n() >= min;
-                    if !process && i % 100_000 == 0 {
-                        info!("Filtered {} entities from dump up to {:?}", i, e.id);
-                    }
-                    ready(if process { Some(e) } else { None })
+    let maybe_dump_pair = {
+        match dump_config {
+            None => None,
+            Some(dump_config) => {
+                assert_eq!(ty, dump_config.ty);
+                let id_stream = id_stream(min, max, ty);
+                let dump_stream = get_dump_stream(dump_config.clone())
+                    .await
+                    .enumerate()
+                    .filter_map(move |(i, e)| {
+                        let process = e.id.n() >= min;
+                        if !process && i % 100_000 == 0 {
+                            info!("Filtered {} entities from dump up to {:?}", i, e.id);
+                        }
+                        ready(if process { Some(e) } else { None })
+                    });
+                let client = client.clone();
+
+                let joined = JoinStreams::new(id_stream, dump_stream, move |id: EntityId| {
+                    client.get_entity(id, None)
                 });
-        let client = client.clone();
 
-        let joined = JoinStreams::new(id_stream, dump_stream, move |id: EntityId| {
-            client.get_entity(id, None)
-        });
-
-        (dump_event_id, joined)
+                Some((dump_config.event_stream_start, joined))
+            }
+        }
     };
 
     let raw_pair = {
@@ -76,12 +100,12 @@ pub async fn init_inner(
         (current, entity_stream)
     };
 
-    let (event_id, final_stream) = if max - min < 1_000_000 {
+    let (event_id, final_stream) = if max - min >= 1_000_000 && maybe_dump_pair.is_some() {
+        let (event_id, stream) = maybe_dump_pair.unwrap();
+        (event_id, stream.right_stream())
+    } else {
         let (event_id, stream) = raw_pair;
         (event_id, stream.left_stream())
-    } else {
-        let (event_id, stream) = dump_pair;
-        (event_id, stream.right_stream())
     };
 
     let update_stream = final_stream
@@ -174,7 +198,7 @@ mod test {
         let ty = EntityType::Property;
         let id = ty.id(3038);
 
-        let stream = init_inner(ty, Some(id), id).await;
+        let stream = init_inner(ty, Some(id), id, None).await;
 
         let mut messages = stream.collect::<VecDeque<_>>().await;
 

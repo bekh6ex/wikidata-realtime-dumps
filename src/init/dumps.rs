@@ -1,4 +1,4 @@
-use async_compression::stream::BzDecoder;
+use async_compression::stream::{BzDecoder, GzipDecoder};
 use async_std::prelude::*;
 use futures::future::ready;
 use futures::stream::*;
@@ -15,14 +15,15 @@ use continuous_download::ContinuousDownloadStream;
 use sorted_stream::BufferedSortedStream;
 
 use crate::http_client::create_client;
+use crate::init::{ArchiveFormat, DumpConfig, DumpFormat};
 use crate::prelude::*;
+use std::pin::Pin;
 
 pub(super) async fn get_dump_stream(
-    ty: EntityType,
-    dump_url: String,
+    dump_config: DumpConfig,
 ) -> impl Stream<Item = SerializedEntity> {
-    let stream = json_stream(dump_url).await;
-    let stream = convert_to_serialized_entity(ty, stream);
+    let stream = json_stream(dump_config.clone()).await;
+    let stream = convert_to_serialized_entity(dump_config.ty, stream);
     sort_stream(stream)
 }
 
@@ -98,27 +99,50 @@ fn download_dump_with_restarts(
     )
 }
 
-async fn json_stream(dump_url: String) -> impl Stream<Item = String> {
+async fn json_stream(dump_config: DumpConfig) -> impl Stream<Item = String> {
     let client1 = create_client();
     let client = client1;
 
-    let stream = download_dump_with_restarts(client, dump_url);
+    let stream = download_dump_with_restarts(client, dump_config.url.clone());
 
-    let stream = BzDecoder::new(stream);
+    let stream: Pin<Box<dyn Stream<Item = std::io::Result<bytes::Bytes>>>> =
+        match dump_config.archive_format {
+            ArchiveFormat::Bzip2 => Box::pin(BzDecoder::new(stream)),
+            ArchiveFormat::Gzip => Box::pin(GzipDecoder::new(stream)),
+        };
 
     let inner = stream.into_async_read();
     let stream = FramedRead::new(inner, LinesCodec {});
 
-    // TODO: Handle last line "]\n"
+    let stream: Pin<Box<dyn Stream<Item = String>>> = match dump_config.dump_format {
+        DumpFormat::WikidataJsonArray => {
+            // TODO: Handle last line "]\n"
+            let stream = stream
+                .skip(1) //First line is always "[\n"
+                .map(|r| r.expect("Dump response stream terminated"))
+                .map(|mut s: String| {
+                    let len = s.len();
+                    let tail_len = 2; //For trailing ",\n"
+                    s.truncate(len - tail_len);
+                    s
+                });
+            Box::pin(stream)
+        }
+        DumpFormat::SortedJsonLines => {
+            let stream = stream
+                .map(|r| r.expect("Dump response stream terminated"))
+                .map(|mut s: String| {
+                    let len = s.len();
+                    let tail_len = 1; //For trailing "\n"
+                    s.truncate(len - tail_len);
+                    s
+                });
+
+            Box::pin(stream)
+        }
+    };
+
     stream
-        .skip(1) //First line is always "[\n"
-        .map(|r| r.expect("Dump response stream terminated"))
-        .map(|mut s: String| {
-            let len = s.len();
-            let tail_len = 2; //For trailing ",\n"
-            s.truncate(len - tail_len);
-            s
-        })
 }
 
 #[derive(Deserialize)]

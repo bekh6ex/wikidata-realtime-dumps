@@ -17,6 +17,7 @@ use crate::events::{update_command_stream, EventId};
 use crate::prelude::EntityType;
 
 use self::archive::{start, ArchivariusMap};
+use crate::init::{ArchiveFormat, DumpConfig, DumpFormat};
 
 mod archive;
 mod events;
@@ -33,6 +34,8 @@ async fn main() -> std::io::Result<()> {
 
     info!("Starting...");
 
+    let dump_config = get_dump_config();
+
     // TODO: Lock storage file
 
     let types = vec![EntityType::Item];
@@ -42,7 +45,7 @@ async fn main() -> std::io::Result<()> {
 
     let ws = warp_server::start(&map);
 
-    let update_streams = get_streams(map.clone()).await;
+    let update_streams = get_streams(map.clone(), dump_config).await;
 
     let futures: Vec<Pin<Box<dyn Future<Output = ()>>>> = vec![Box::pin(ws), update_streams];
 
@@ -50,8 +53,21 @@ async fn main() -> std::io::Result<()> {
     Ok(())
 }
 
+fn get_dump_config() -> Option<DumpConfig> {
+    let dump_event_id = "[{\"topic\":\"eqiad.mediawiki.recentchange\",\"partition\":0,\"timestamp\":1579456654000},{\"topic\":\"codfw.mediawiki.recentchange\",\"partition\":0,\"offset\":-1}]";
+    let dump_event_id = EventId::new(dump_event_id.to_owned());
+    Some(DumpConfig {
+        url: "https://dumps.wikimedia.org/other/wikibase/wikidatawiki/20200120/wikidata-20200120-all.json.bz2".to_owned(),
+        event_stream_start: dump_event_id,
+        ty: EntityType::Item,
+        archive_format: ArchiveFormat::Bzip2,
+        dump_format: DumpFormat::WikidataJsonArray,
+    })
+}
+
 async fn get_streams(
     map: Arc<BTreeMap<EntityType, Addr<Archivarius>>>,
+    dump_config: Option<DumpConfig>,
 ) -> Pin<Box<dyn Future<Output = ()>>> {
     fn to_vec(
         map: Arc<BTreeMap<EntityType, Addr<Archivarius>>>,
@@ -62,10 +78,12 @@ async fn get_streams(
     }
 
     let map = to_vec(map);
-    let res = stream::iter(map).for_each_concurrent(None, |(entity_type, archive_actor)| {
+    let res = stream::iter(map).for_each_concurrent(None, move |(entity_type, archive_actor)| {
+        let dump_config = dump_config.clone();
         async move {
             let entity_type = entity_type;
-            let initial_event_id = initialize(entity_type, archive_actor.clone()).await;
+            let initial_event_id =
+                initialize(entity_type, archive_actor.clone(), dump_config).await;
 
             let update_stream = update_command_stream(entity_type, initial_event_id).await;
 
@@ -84,10 +102,14 @@ async fn get_streams(
     Box::pin(res)
 }
 
-async fn initialize(ty: EntityType, actor: Addr<Archivarius>) -> EventId {
+async fn initialize(
+    ty: EntityType,
+    actor: Addr<Archivarius>,
+    dump_config: Option<DumpConfig>,
+) -> EventId {
     let response = actor.send(QueryState).await.expect("Failed commun");
 
-    let init_stream = init::init(ty, response.initialized_up_to).await;
+    let init_stream = init::init(ty, response.initialized_up_to, dump_config).await;
 
     let init_stream = init_stream.for_each({
         let actor = actor.clone();
