@@ -185,9 +185,9 @@ impl Handler<WriteDown> for VolumeKeeper {
     type Result = ();
 
     fn handle(&mut self, _msg: WriteDown, _ctx: &mut Self::Context) -> Self::Result {
-        info!("VolumeKeeper({}): Writing down the results", self.i);
+        debug!("VolumeKeeper({}): Writing down the results", self.i);
         if self.command_buffer.is_empty() {
-            info!("VolumeKeeper({}): Nothing to write down", self.i);
+            debug!("VolumeKeeper({}): Nothing to write down", self.i);
 
             return;
         }
