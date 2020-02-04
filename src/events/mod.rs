@@ -302,7 +302,10 @@ impl Eq for EventId {}
 struct SerializedEventIdPart {
     topic: String,
     partition: i8,
+    // TODO: Test it. It is crucial. Otherwise header is not processed correctly
+    #[serde(skip_serializing_if = "Option::is_none")]
     timestamp: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     offset: Option<i8>,
 }
 
