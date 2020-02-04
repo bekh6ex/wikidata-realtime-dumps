@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 use std::pin::Pin;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use futures::future::ready;
 use futures::stream::once;
@@ -98,13 +98,21 @@ pub async fn update_command_stream(
         })
         .buffered(10)
         .enumerate()
-        .map(move |(i, e)| {
+        .map(move |(i, e): (usize, UpdateCommand)| {
             if i % 10usize == 0 {
+                let timestamp = e.event_id().timestamp_ms();
+                let current_timestamp = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .expect("Time went backwards")
+                    .as_millis() as u64;
+                let lag = Duration::from_millis(current_timestamp - timestamp);
+
                 info!(
-                    "Walked {} events for {:?}. Current: {:?}",
+                    "Walked {} events for {:?}. Current: {:?} lag = {:?}",
                     i + 1,
                     ty,
-                    e.event_id()
+                    e.event_id(),
+                    lag
                 );
             }
             e
@@ -220,7 +228,7 @@ impl EventId {
         serde_json::to_string(&self.parts).unwrap()
     }
 
-    fn timestamp_ms(&self) -> u64 {
+    pub fn timestamp_ms(&self) -> u64 {
         let part = &self.parts[self.timestamp_part_pos()];
         part.timestamp.unwrap()
     }
