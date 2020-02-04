@@ -180,6 +180,7 @@ impl Archivarius {
     }
 
     fn save_state(&mut self) {
+        debug!("Saving state");
         self.store.save(self.state());
     }
 
