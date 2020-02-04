@@ -16,7 +16,7 @@ use crate::prelude::EntityType;
 pub(super) async fn start(ar: &Arc<BTreeMap<EntityType, Addr<Archivarius>>>) {
     let hello = get_dump_route(ar);
 
-    let ws = warp::serve(hello).run("127.0.0.1:8080".parse::<SocketAddrV4>().unwrap());
+    let ws = warp::serve(hello).run("0.0.0.0:8080".parse::<SocketAddrV4>().unwrap());
     ws.await
 }
 
