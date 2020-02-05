@@ -101,7 +101,7 @@ pub(super) fn start(types: Vec<EntityType>) -> ArchivariusMap {
 
     // Multiplying cores by X, because Volume actors a synchronous and block the thread.
     // This way we can utilize cpu for 100% percent.
-    let actor_number = NonZeroUsize::new(cpu_number * 2).unwrap();
+    let actor_number = NonZeroUsize::new(cpu_number * 3).unwrap();
     let arbiter_pool = ArbiterPool::new(actor_number);
 
     let tuples = types.iter().map(move |ty| {
