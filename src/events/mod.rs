@@ -358,7 +358,7 @@ impl EventData {
                             event_id,
                             entity: serialized_entity,
                         },
-                        None =>  {
+                        None => {
                             error!("Not found: {:?} {:?}", id, revision_id);
                             // Strange, but seems to be the case for
                             // EntityId { ty: Item, id: 16443659 } RevisionId(1101501328)
@@ -367,7 +367,7 @@ impl EventData {
                                 id,
                                 revision: revision_id,
                             }
-                        },
+                        }
                     });
 
                 Some(Box::pin(command_fut))

@@ -53,21 +53,24 @@ async fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-fn get_dump_config() -> Option<DumpConfig> {
+fn get_dump_config() -> BTreeMap<EntityType, DumpConfig> {
     let dump_event_id = "[{\"topic\":\"eqiad.mediawiki.recentchange\",\"partition\":0,\"timestamp\":1579993200000},{\"topic\":\"codfw.mediawiki.recentchange\",\"partition\":0,\"offset\":-1}]";
     let dump_event_id = EventId::new(dump_event_id.to_owned());
-    Some(DumpConfig {
+    let mut map = BTreeMap::new();
+    let item_dump_config = DumpConfig {
         url: "https://dumps.wikimedia.org/other/wikibase/wikidatawiki/20200127/wikidata-20200127-all.json.bz2".to_owned(),
         event_stream_start: dump_event_id,
         ty: EntityType::Item,
         archive_format: ArchiveFormat::Bzip2,
         dump_format: DumpFormat::WikidataJsonArray,
-    })
+    };
+    map.insert(EntityType::Item, item_dump_config);
+    map
 }
 
 async fn get_streams(
     map: Arc<BTreeMap<EntityType, Addr<Archivarius>>>,
-    dump_config: Option<DumpConfig>,
+    dump_config_map: BTreeMap<EntityType, DumpConfig>,
 ) -> Pin<Box<dyn Future<Output = ()>>> {
     fn to_vec(
         map: Arc<BTreeMap<EntityType, Addr<Archivarius>>>,
@@ -79,7 +82,7 @@ async fn get_streams(
 
     let map = to_vec(map);
     let res = stream::iter(map).for_each_concurrent(None, move |(entity_type, archive_actor)| {
-        let dump_config = dump_config.clone();
+        let dump_config = dump_config_map.get(&entity_type).map(|c| c.clone());
         async move {
             let entity_type = entity_type;
             let initial_event_id =
@@ -96,7 +99,9 @@ async fn get_streams(
             };
 
             // TODO: Increase rewind EventId value on start to be sure
-            update_stream.for_each_concurrent(num_cpus::get() * 3, send_forward).await
+            update_stream
+                .for_each_concurrent(num_cpus::get() * 3, send_forward)
+                .await
         }
     });
 
