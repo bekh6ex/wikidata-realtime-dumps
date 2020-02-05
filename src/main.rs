@@ -18,6 +18,7 @@ use crate::prelude::EntityType;
 
 use self::archive::{start, ArchivariusMap};
 use crate::init::{ArchiveFormat, DumpConfig, DumpFormat};
+use crate::get_entity::GetEntityClient;
 
 mod archive;
 mod events;
@@ -43,8 +44,10 @@ async fn main() -> std::io::Result<()> {
     let map: ArchivariusMap = start(types);
 
     let ws = warp_server::start(&map);
+    let client = GetEntityClient::default();
 
-    let update_streams = get_streams(map.clone(), dump_config).await;
+
+    let update_streams = get_streams(client, map.clone(), dump_config).await;
 
     let futures: Vec<Pin<Box<dyn Future<Output = ()>>>> = vec![Box::pin(ws), update_streams];
 
@@ -68,6 +71,7 @@ fn get_dump_config() -> BTreeMap<EntityType, DumpConfig> {
 }
 
 async fn get_streams(
+    client: GetEntityClient,
     map: Arc<BTreeMap<EntityType, Addr<Archivarius>>>,
     dump_config_map: BTreeMap<EntityType, DumpConfig>,
 ) -> Pin<Box<dyn Future<Output = ()>>> {
@@ -82,12 +86,13 @@ async fn get_streams(
     let map = to_vec(map);
     let res = stream::iter(map).for_each_concurrent(None, move |(entity_type, archive_actor)| {
         let dump_config = dump_config_map.get(&entity_type).map(|c| c.clone());
+        let client = client.clone();
         async move {
             let entity_type = entity_type;
             let initial_event_id =
-                initialize(entity_type, archive_actor.clone(), dump_config).await;
+                initialize(client.clone(), entity_type, archive_actor.clone(), dump_config).await;
 
-            let update_stream = update_command_stream(entity_type, initial_event_id).await;
+            let update_stream = update_command_stream(client, entity_type, initial_event_id).await;
 
             let send_forward = move |e: UpdateCommand| {
                 let result = archive_actor.send(e);
@@ -108,13 +113,14 @@ async fn get_streams(
 }
 
 async fn initialize(
+    client: GetEntityClient,
     ty: EntityType,
     actor: Addr<Archivarius>,
     dump_config: Option<DumpConfig>,
 ) -> EventId {
     let response = actor.send(QueryState).await.expect("Failed commun");
 
-    let init_stream = init::init(ty, response.initialized_up_to, dump_config).await;
+    let init_stream = init::init(client, ty, response.initialized_up_to, dump_config).await;
 
     let init_stream = init_stream.for_each({
         let actor = actor.clone();

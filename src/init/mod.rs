@@ -36,6 +36,7 @@ pub enum DumpFormat {
 }
 
 pub async fn init(
+    client: GetEntityClient,
     ty: EntityType,
     start_id: Option<EntityId>,
     dump_config: Option<DumpConfig>,
@@ -46,10 +47,11 @@ pub async fn init(
 
     let end_id = ty.id(end_id.n() + safety_offset);
 
-    init_inner(ty, start_id, end_id, dump_config).await
+    init_inner(client, ty, start_id, end_id, dump_config).await
 }
 
 pub async fn init_inner(
+    client: GetEntityClient,
     ty: EntityType,
     start_id: Option<EntityId>,
     end_id: EntityId,
@@ -59,8 +61,6 @@ pub async fn init_inner(
 
     let min = start_id.map(|i| i.n()).unwrap_or(1);
     let max = end_id.n();
-
-    let client = GetEntityClient::default();
 
     debug!("Creating init stream for {:?}", ty);
 
@@ -198,7 +198,9 @@ mod test {
         let ty = EntityType::Property;
         let id = ty.id(3038);
 
-        let stream = init_inner(ty, Some(id), id, None).await;
+        let client = GetEntityClient::default();
+
+        let stream = init_inner(client, ty, Some(id), id, None).await;
 
         let mut messages = stream.collect::<VecDeque<_>>().await;
 

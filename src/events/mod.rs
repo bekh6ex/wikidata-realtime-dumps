@@ -83,15 +83,15 @@ async fn open_new_sse_stream(event_id: Option<String>) -> impl Stream<Item = Eve
 }
 
 pub async fn update_command_stream(
+    client: GetEntityClient,
     ty: EntityType,
     event_id: EventId,
 ) -> impl Stream<Item = UpdateCommand> {
-    let client_for_entities = GetEntityClient::default();
 
     get_wikidata_event_stream(Some(event_id), ty)
         .await
         .filter_map(move |event: ProperEvent| {
-            let client = client_for_entities.clone();
+            let client = client.clone();
             async move {
                 event.into_command(client, ty)
                 // TODO Add logging
