@@ -35,7 +35,7 @@ impl VolumeKeeper {
             i,
             storage: Some(Volume::new_open(
                 ty,
-                format!("/tmp/wd-rt-dumps/{:?}/{}.gz", ty, i),
+                format!("wd-rt-dumps/{:?}/{}.gz", ty, i),
             )),
             command_buffer: vec![],
             write_down_reminder: None,
@@ -47,7 +47,7 @@ impl VolumeKeeper {
             i,
             storage: Some(Volume::new_closed(
                 ty,
-                format!("/tmp/wd-rt-dumps/{:?}/{}.gz", ty, i),
+                format!("wd-rt-dumps/{:?}/{}.gz", ty, i),
             )),
             command_buffer: vec![],
             write_down_reminder: None,

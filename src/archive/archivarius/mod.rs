@@ -41,7 +41,7 @@ pub(crate) struct Archivarius {
 
 impl Archivarius {
     pub fn new(ty: EntityType, arbiters: ArbiterPool) -> Archivarius {
-        let store = ArchivariusStore::new(format!("/tmp/wd-rt-dumps/{:?}/archivarius.json", ty));
+        let store = ArchivariusStore::new(format!("wd-rt-dumps/{:?}/archivarius.json", ty));
 
         let state = store.load().unwrap_or_default();
 
