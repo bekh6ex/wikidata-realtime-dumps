@@ -95,6 +95,7 @@ async fn get_streams(
                 })
             };
 
+            // TODO: Increase rewind EventId value on start to be sure
             update_stream.for_each_concurrent(num_cpus::get() * 2, send_forward).await
         }
     });
