@@ -95,7 +95,7 @@ async fn get_streams(
                 })
             };
 
-            update_stream.for_each(send_forward).await
+            update_stream.for_each_concurrent(num_cpus::get() * 2, send_forward).await
         }
     });
 
