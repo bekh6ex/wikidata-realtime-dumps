@@ -54,10 +54,10 @@ async fn main() -> std::io::Result<()> {
 }
 
 fn get_dump_config() -> Option<DumpConfig> {
-    let dump_event_id = "[{\"topic\":\"eqiad.mediawiki.recentchange\",\"partition\":0,\"timestamp\":1579456654000},{\"topic\":\"codfw.mediawiki.recentchange\",\"partition\":0,\"offset\":-1}]";
+    let dump_event_id = "[{\"topic\":\"eqiad.mediawiki.recentchange\",\"partition\":0,\"timestamp\":1579993200000},{\"topic\":\"codfw.mediawiki.recentchange\",\"partition\":0,\"offset\":-1}]";
     let dump_event_id = EventId::new(dump_event_id.to_owned());
     Some(DumpConfig {
-        url: "https://dumps.wikimedia.org/other/wikibase/wikidatawiki/20200120/wikidata-20200120-all.json.bz2".to_owned(),
+        url: "https://dumps.wikimedia.org/other/wikibase/wikidatawiki/20200127/wikidata-20200127-all.json.bz2".to_owned(),
         event_stream_start: dump_event_id,
         ty: EntityType::Item,
         archive_format: ArchiveFormat::Bzip2,
