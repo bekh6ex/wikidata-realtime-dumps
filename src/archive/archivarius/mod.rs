@@ -1,7 +1,7 @@
 use std::mem::replace;
 use std::ops::RangeInclusive;
 use std::path::Path;
-use std::sync::{Arc, RwLock, RwLockReadGuard};
+use std::sync::{RwLock, RwLockReadGuard};
 
 use actix::{Actor, Addr, AsyncContext, Context, Handler, Message, MessageResult};
 use bytes::Bytes;
@@ -321,19 +321,6 @@ impl Handler<UpdateCommand> for Archivarius {
     }
 }
 
-impl Handler<InitializationFinished> for Archivarius {
-    type Result = Arc<()>;
-
-    fn handle(&mut self, _msg: InitializationFinished, _ctx: &mut Self::Context) -> Self::Result {
-        self.everything_is_persisted = true;
-
-        info!("Initialization finished. Sending command to persist the chunk of an open actor");
-        self.open_volume.do_send(volume::Persist::JustPersist);
-
-        Arc::new(())
-    }
-}
-
 struct CloseOpenActor {
     addr: Addr<VolumeKeeper>,
 }
@@ -468,18 +455,18 @@ impl Handler<Initialization> for Archivarius {
                 MessageResult(result)
             }
             Initialization::Finished => {
-                // Mark as initialized???
-                MessageResult(Box::pin(ready(())) as UnitFuture)
+                self.everything_is_persisted = true;
+
+                info!("Initialization finished. Sending command to persist the chunk of an open actor");
+
+                let result = self.open_volume.send(volume::Persist::JustPersist);
+
+                MessageResult(Box::pin(result.map(|r| r.unwrap())) as UnitFuture)
             }
         }
     }
 }
 
-pub struct InitializationFinished;
-
-impl Message for InitializationFinished {
-    type Result = Arc<()>;
-}
 
 struct ArchivariusStore {
     path: RwLock<String>,
