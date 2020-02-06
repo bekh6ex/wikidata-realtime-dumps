@@ -21,8 +21,6 @@ use self::volume::{GetChunk, VolumeKeeper};
 mod tracker;
 mod volume;
 
-const ARBITERS: usize = 8;
-
 const MAX_CHUNK_SIZE: usize = 44 * 1024 * 1024;
 //const MAX_CHUNK_SIZE: usize = 5 * 1024 * 1024;
 
@@ -244,9 +242,10 @@ impl Handler<GetDump> for Archivarius {
 
         let stream = iter(children)
             .map(|c| c.send(GetChunk))
-            .buffered(ARBITERS)
+            .buffered(3)
             .map(|r| r.expect("Actor communication issue"))
             .filter_map(|b: Bytes| {
+                // TODO: Check if it is still needed with Warp
                 async {
                     if b.is_empty() {
                         None
