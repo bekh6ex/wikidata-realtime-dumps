@@ -30,13 +30,12 @@ pub(crate) struct Archivarius {
     store: ArchivariusStore<String>,
     ty: EntityType,
     everything_is_persisted: bool,
-    closed_actors: Vec<(EntityRange, Addr<VolumeKeeper>)>,
-    open_actor: Addr<VolumeKeeper>,
+    finished_volumes: Vec<(EntityRange, Addr<VolumeKeeper>)>,
+    open_volume: Addr<VolumeKeeper>,
     last_id_to_open_actor: Option<EntityId>,
     arbiters: ArbiterPool,
     last_processed_event_id: Option<EventId>,
     updates_received: u32,
-    // initialized_up_to - last EntityId of persisted actor
 }
 
 impl Archivarius {
@@ -90,8 +89,8 @@ impl Archivarius {
             ty,
             everything_is_persisted: initialized,
             arbiters,
-            closed_actors,
-            open_actor,
+            finished_volumes: closed_actors,
+            open_volume: open_actor,
             last_id_to_open_actor,
             last_processed_event_id: state.last_processed_event_id,
             updates_received: 0,
@@ -99,7 +98,7 @@ impl Archivarius {
     }
 
     fn state(&self) -> StoredState {
-        let closed = self.closed_actors.iter().map(|(r, _)| r.clone()).collect();
+        let closed = self.finished_volumes.iter().map(|(r, _)| r.clone()).collect();
 
         StoredState {
             closed,
@@ -113,19 +112,19 @@ impl Archivarius {
         !self.everything_is_persisted
     }
 
-    fn find_closed(&self, id: EntityId) -> Option<Addr<VolumeKeeper>> {
-        self.closed_actors
+    fn find_volume_in_finished(&self, id: EntityId) -> Option<Addr<VolumeKeeper>> {
+        self.finished_volumes
             .iter()
             .find(|(range, _actor)| range.inner.contains(&id))
             .map(|(_, a)| a.clone())
     }
 
     fn find_volume(&self, id: EntityId) -> (bool, Addr<VolumeKeeper>) {
-        let target_actor = self.find_closed(id);
+        let target_actor = self.find_volume_in_finished(id);
 
         match target_actor {
             Some(actor) => (false, actor),
-            None => (true, self.open_actor.clone()),
+            None => (true, self.open_volume.clone()),
         }
     }
 
@@ -145,7 +144,7 @@ impl Archivarius {
     }
 
     fn close_current_open_actor(&mut self) {
-        let new_id = self.closed_actors.len() + 1;
+        let new_id = self.finished_volumes.len() + 1;
 
         let ty = self.ty;
         let initializing = self.initialization_in_progress();
@@ -155,7 +154,7 @@ impl Archivarius {
             .expect("Closed an empty open actor");
 
         let new_range = self
-            .closed_actors
+            .finished_volumes
             .last()
             .map(|(last_range, _)| last_range.next_adjacent(last_id_to_open_volume))
             .unwrap_or_else(|| EntityRange::from_start(last_id_to_open_volume));
@@ -171,9 +170,7 @@ impl Archivarius {
                 }
             });
 
-        let old_open_actor = replace(&mut self.open_actor, new_open_actor);
-
-        // TODO Set end ID for last actor
+        let old_open_actor = replace(&mut self.open_volume, new_open_actor);
 
         if self.initialization_in_progress() {
             info!("Sending command to persist the chunk");
@@ -181,7 +178,7 @@ impl Archivarius {
             // TODO: Must await Persist response to sore Archivarius state
         }
 
-        self.closed_actors.push((new_range, old_open_actor));
+        self.finished_volumes.push((new_range, old_open_actor));
 
         self.save_state();
     }
@@ -235,9 +232,9 @@ impl Handler<GetDump> for Archivarius {
         debug!("thread={} Get dump", thread);
 
         let mut children: Vec<Addr<_>> =
-            self.closed_actors.iter().map(|(_, c)| c.clone()).collect();
+            self.finished_volumes.iter().map(|(_, c)| c.clone()).collect();
 
-        children.push(self.open_actor.clone());
+        children.push(self.open_volume.clone());
 
         let stream = iter(children)
             .map(|c| c.send(GetChunk))
@@ -325,7 +322,7 @@ impl Handler<InitializationFinished> for Archivarius {
         self.everything_is_persisted = true;
 
         info!("Initialization finished. Sending command to persist the chunk of an open actor");
-        self.open_actor.do_send(volume::Persist::JustPersist);
+        self.open_volume.do_send(volume::Persist::JustPersist);
 
         Arc::new(())
     }
@@ -343,7 +340,7 @@ impl Handler<CloseOpenActor> for Archivarius {
     type Result = MessageResult<CloseOpenActor>;
 
     fn handle(&mut self, msg: CloseOpenActor, _ctx: &mut Self::Context) -> Self::Result {
-        if self.open_actor != msg.addr {
+        if self.open_volume != msg.addr {
             return MessageResult(());
         }
 
@@ -391,7 +388,7 @@ impl Handler<QueryState> for Archivarius {
         let initialized_up_to = if self.everything_is_persisted {
             self.last_id_to_open_actor
         } else {
-            self.closed_actors.last().map(|(r, _)| *r.inner.end())
+            self.finished_volumes.last().map(|(r, _)| *r.inner.end())
         };
 
         MessageResult(QueryStateResponse {
