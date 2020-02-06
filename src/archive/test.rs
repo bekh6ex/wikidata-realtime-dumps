@@ -12,10 +12,11 @@ use crate::archive::arbiter_pool::ArbiterPool;
 use crate::events::EventId;
 use crate::prelude::{EntityType, RevisionId, SerializedEntity};
 
-#[actix_rt::test]
-#[test]
-async fn just_initialized_archivarius_should_return_item_from_dump() {
-    with_temp_dir(|dir| async move {
+use proptest_attr_macro::proptest;
+
+#[proptest]
+fn just_initialized_archivarius_should_return_item_from_dump(id: u32) {
+    with_temp_dir(move |dir| async move {
         let archivarius = item_archivarius(dir);
 
         let mut revision = (1u64..).into_iter();
@@ -26,7 +27,7 @@ async fn just_initialized_archivarius_should_return_item_from_dump() {
         let start_event_id = EventId::test(1);
 
         archivarius.send(Initialization::Start(start_event_id)).await.unwrap().await;
-        archivarius.send(Initialization::UpdateEntity(item(1, next_rev()))).await.unwrap().await;
+        archivarius.send(Initialization::UpdateEntity(item(id, next_rev()))).await.unwrap().await;
         archivarius.send(Initialization::Finished).await.unwrap().await;
 
         let dump_stream: GetDumpResult = archivarius.send(GetDump).await.unwrap();
@@ -35,18 +36,26 @@ async fn just_initialized_archivarius_should_return_item_from_dump() {
 
         assert_eq!(entities.len(), 1);
         let entity = entities.pop().unwrap();
-        assert_eq!(entity.id, "Q1");
+        let expected_id = EntityType::Item.id(id).to_string();
+        assert_eq!(entity.id, expected_id);
         assert_eq!(entity.lastrevid, 1);
-    }).await
+    })
 }
 
-async fn with_temp_dir<Fut>(f: fn(String) -> Fut)
-    where Fut: Future<Output = ()>
+fn with_temp_dir<Fn, Fut>(f: Fn)
+    where
+        Fn: FnOnce(String) -> Fut + 'static,
+        Fut: Future<Output=()> + 'static
 {
     let dir: u64 = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
     let dir = format!("/tmp/wd-tests/{}", dir);
-
-    f(dir.clone()).await;
+    actix_rt::System::new("test")
+        .block_on({
+            let dir = dir.clone();
+            async move {
+                f(dir).await;
+            }
+        });
 
     std::fs::remove_dir_all(dir).unwrap();
 }
