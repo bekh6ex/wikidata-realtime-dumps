@@ -99,7 +99,7 @@ impl Message for UpdateChunkCommand {
 pub(super) fn start(types: Vec<EntityType>) -> ArchivariusMap {
     let cpu_number = num_cpus::get();
 
-    // Multiplying cores by X, because Volume actors a synchronous and block the thread.
+    // Multiplying cores by X, because Volume actors are synchronous and block the thread.
     // This way we can utilize cpu for 100% percent.
     let actor_number = NonZeroUsize::new(cpu_number * 3).unwrap();
     let arbiter_pool = ArbiterPool::new(actor_number);
