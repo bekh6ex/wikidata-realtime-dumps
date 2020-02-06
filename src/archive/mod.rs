@@ -20,6 +20,9 @@ pub(crate) type ArchivariusMap = Arc<BTreeMap<EntityType, Addr<Archivarius>>>;
 mod arbiter_pool;
 mod archivarius;
 
+#[cfg(test)]
+mod test;
+
 pub struct GetDump;
 
 pub type GetDumpResult = Pin<Box<dyn Stream<Item = Bytes> + Send + Sync>>;
@@ -109,7 +112,7 @@ pub(super) fn start(types: Vec<EntityType>) -> ArchivariusMap {
         let ty = *ty;
         let arbiter_pool = arbiter_pool.clone();
         let act = Archivarius::start_in_arbiter(&arbiter, move |ctx| {
-            Archivarius::new(ty, arbiter_pool.clone(), ctx.address())
+            Archivarius::new("wd-rt-dumps", ty, arbiter_pool.clone(), ctx.address())
         });
         (ty, act)
     });

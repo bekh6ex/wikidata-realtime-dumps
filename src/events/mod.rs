@@ -17,7 +17,6 @@ use crate::events::event_stream::response_to_stream;
 use crate::get_entity::GetEntityClient;
 
 use super::prelude::*;
-use crate::init::DumpFormat::SortedJsonLines;
 
 mod event_stream;
 
@@ -232,6 +231,26 @@ impl EventId {
         let parts = serde_json::from_str::<Vec<SerializedEventIdPart>>(&inner)
             .unwrap_or_else(|e| panic!("Unexpected EventId format: '{}. {}'", inner, e));
         EventId { parts }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn test(timestamp: u64) -> Self {
+        EventId {
+           parts: vec![
+               SerializedEventIdPart {
+                   topic: "".to_owned(),
+                   partition: 0,
+                   timestamp: Some(timestamp),
+                   offset: None,
+               },
+               SerializedEventIdPart {
+                   topic: "".to_owned(),
+                   partition: 0,
+                   timestamp: None,
+                   offset: Some(-1),
+               }
+           ]
+        }
     }
 
     fn to_json_string(&self) -> String {

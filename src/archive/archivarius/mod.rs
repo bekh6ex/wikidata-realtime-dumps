@@ -1,22 +1,22 @@
 use std::mem::replace;
 use std::ops::RangeInclusive;
 use std::path::Path;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, RwLockReadGuard};
 
 use actix::{Actor, Addr, AsyncContext, Context, Handler, Message, MessageResult};
 use bytes::Bytes;
+use futures::*;
 use futures::future::*;
 use futures::stream::iter;
-use futures::*;
 use log::*;
 use serde::{Deserialize, Serialize};
 
-use self::volume::{GetChunk, VolumeKeeper};
 use crate::archive::{GetDump, GetDumpResult, UnitFuture, UpdateChunkCommand, UpdateCommand};
+use crate::archive::arbiter_pool::ArbiterPool;
 use crate::events::EventId;
 use crate::prelude::*;
 
-use crate::archive::arbiter_pool::ArbiterPool;
+use self::volume::{GetChunk, VolumeKeeper};
 
 mod tracker;
 mod volume;
@@ -27,7 +27,7 @@ const MAX_CHUNK_SIZE: usize = 44 * 1024 * 1024;
 //const MAX_CHUNK_SIZE: usize = 5 * 1024 * 1024;
 
 pub(crate) struct Archivarius {
-    store: ArchivariusStore<String>,
+    store: ArchivariusStore,
     ty: EntityType,
     everything_is_persisted: bool,
     finished_volumes: Vec<(EntityRange, Addr<VolumeKeeper>)>,
@@ -39,8 +39,8 @@ pub(crate) struct Archivarius {
 }
 
 impl Archivarius {
-    pub fn new(ty: EntityType, arbiters: ArbiterPool, self_address: Addr<Archivarius>) -> Archivarius {
-        let store = ArchivariusStore::new(format!("wd-rt-dumps/{:?}/archivarius.json", ty));
+    pub fn new(root_path: &str, ty: EntityType, arbiters: ArbiterPool, self_address: Addr<Archivarius>) -> Archivarius {
+        let store = ArchivariusStore::new(root_path, ty);
 
         let state = store.load().unwrap_or_default();
 
@@ -49,20 +49,22 @@ impl Archivarius {
 
     fn new_initialized(
         ty: EntityType,
-        store: ArchivariusStore<String>,
+        store: ArchivariusStore,
         state: StoredState,
         arbiters: ArbiterPool,
         self_address: Addr<Archivarius>,
     ) -> Archivarius {
+        let volume_root_path = store.volume_root_path();
         let closed_actors = state
             .closed
             .iter()
             .enumerate()
             .map(|(id, er)| {
+                let volume_root_path = volume_root_path.clone();
                 let range = er.clone();
                 let self_address = self_address.clone();
                 let vol = VolumeKeeper::start_in_arbiter(arbiters.next().as_ref(), move |_| {
-                    volume::VolumeKeeper::persistent(self_address, ty, id as i32, *range.inner.start(), Some(*range.inner.end()))
+                    volume::VolumeKeeper::persistent(volume_root_path, self_address, ty, id as i32, *range.inner.start(), Some(*range.inner.end()))
                 });
 
                 (er.clone(), vol)
@@ -75,9 +77,9 @@ impl Archivarius {
 
         let open_actor = VolumeKeeper::start_in_arbiter(arbiters.next().as_ref(), move |_| {
             if initialized {
-                VolumeKeeper::persistent(self_address, ty, new_id as i32, start_id_for_new_volume, None)
+                VolumeKeeper::persistent(volume_root_path.clone(),self_address, ty, new_id as i32, start_id_for_new_volume, None)
             } else {
-                VolumeKeeper::in_memory(self_address, ty, new_id as i32,start_id_for_new_volume, None)
+                VolumeKeeper::in_memory(volume_root_path.clone(),self_address, ty, new_id as i32,start_id_for_new_volume, None)
             }
         });
 
@@ -146,6 +148,8 @@ impl Archivarius {
     }
 
     fn close_current_open_actor(&mut self, self_addr: Addr<Self>) {
+        let volume_root_path = self.store.volume_root_path();
+
         let new_id = self.finished_volumes.len() + 1;
 
         let ty = self.ty;
@@ -166,9 +170,9 @@ impl Archivarius {
         let new_open_actor =
             VolumeKeeper::start_in_arbiter(self.arbiters.next().as_ref(), move |_| {
                 if initializing {
-                    VolumeKeeper::in_memory(self_addr,ty, new_id as i32, range_start_for_new_volume, None)
+                    VolumeKeeper::in_memory(volume_root_path.clone(), self_addr,ty, new_id as i32, range_start_for_new_volume, None)
                 } else {
-                    VolumeKeeper::persistent(self_addr, ty, new_id as i32,range_start_for_new_volume, None)
+                    VolumeKeeper::persistent(volume_root_path.clone(),self_addr, ty, new_id as i32,range_start_for_new_volume, None)
                 }
             });
 
@@ -477,14 +481,17 @@ impl Message for InitializationFinished {
     type Result = Arc<()>;
 }
 
-struct ArchivariusStore<P: AsRef<Path>> {
-    path: RwLock<P>,
+struct ArchivariusStore {
+    path: RwLock<String>,
 }
 
-impl<P: AsRef<Path>> ArchivariusStore<P> {
-    fn new(path: P) -> ArchivariusStore<P> {
+impl ArchivariusStore {
+    fn new<P: AsRef<Path>>(root_path: P, ty: EntityType) -> Self {
         use std::fs::create_dir_all;
-        create_dir_all(path.as_ref().parent().unwrap()).unwrap();
+        let root_path = root_path.as_ref().display();
+        let path = format!("{}/{:?}/archivarius.json", root_path, ty);
+        let path_ref: &Path = path.as_ref();
+        create_dir_all(path_ref.parent().unwrap()).unwrap();
         ArchivariusStore {
             path: RwLock::new(path),
         }
@@ -493,22 +500,30 @@ impl<P: AsRef<Path>> ArchivariusStore<P> {
     fn load(&self) -> Option<StoredState> {
         use serde_json::*;
         use std::fs::read;
-        let path = self.path.read().unwrap();
+        let path: RwLockReadGuard<String> = self.path.read().unwrap();
 
-        read(path.as_ref())
+        let path_ref: &Path = path.as_ref();
+        read(path_ref)
             .ok()
             .map(|r| from_slice::<StoredState>(&r).unwrap())
     }
 
     fn save(&mut self, state: StoredState) {
-        use serde_json::to_string;
         use std::fs::write;
 
-        let contents = to_string(&state).unwrap();
+        let contents = serde_json::to_string_pretty(&state).unwrap();
 
         let path = self.path.write().unwrap();
 
-        write(path.as_ref(), contents).unwrap();
+        let path: &Path = path.as_ref();
+        write(path, contents).unwrap();
+    }
+
+    fn volume_root_path(&self) -> String {
+        let path: RwLockReadGuard<String> = self.path.read().unwrap();
+        let path_ref: &Path = path.as_ref();
+
+        path_ref.parent().unwrap().display().to_string()
     }
 }
 

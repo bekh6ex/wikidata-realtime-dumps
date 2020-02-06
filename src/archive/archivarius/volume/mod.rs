@@ -32,7 +32,7 @@ pub struct VolumeKeeper {
 }
 
 impl VolumeKeeper {
-    pub(super) fn in_memory(master: Addr<Archivarius>, ty: EntityType, i: i32, from: EntityId, to: Option<EntityId>) -> VolumeKeeper {
+    pub(super) fn in_memory(root_path: String, master: Addr<Archivarius>, ty: EntityType, i: i32, from: EntityId, to: Option<EntityId>) -> VolumeKeeper {
         let to = to.map(|to| {
             assert!(to > from);
             to
@@ -42,7 +42,7 @@ impl VolumeKeeper {
             i,
             storage: Some(Volume::new_open(
                 ty,
-                format!("wd-rt-dumps/{:?}/{}.gz", ty, i),
+                format!("{}/{}.gz", root_path, i),
             )),
             command_buffer: vec![],
             write_down_reminder: None,
@@ -51,7 +51,7 @@ impl VolumeKeeper {
         }
     }
 
-    pub(super) fn persistent(master: Addr<Archivarius>, ty: EntityType, i: i32, from: EntityId, to: Option<EntityId>) -> Self {
+    pub(super) fn persistent(root_path: String, master: Addr<Archivarius>, ty: EntityType, i: i32, from: EntityId, to: Option<EntityId>) -> Self {
         let to = to.map(|to| {
             assert!(to > from);
             to
@@ -62,7 +62,7 @@ impl VolumeKeeper {
             i,
             storage: Some(Volume::new_closed(
                 ty,
-                format!("wd-rt-dumps/{:?}/{}.gz", ty, i),
+                format!("{}/{}.gz", root_path, i),
             )),
             command_buffer: vec![],
             write_down_reminder: None,
