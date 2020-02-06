@@ -1,14 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
-use actix::{Actor, AsyncContext, Context, Handler, Message, MessageResult, SpawnHandle};
+use actix::{Actor, AsyncContext, Context, Handler, Message, MessageResult, SpawnHandle, Addr};
 use bytes::Bytes;
 use log::*;
 
 use storage::GzippedData;
 use storage::VolumeStorage;
 
-use crate::archive::UpdateChunkCommand;
+use crate::archive::{UpdateChunkCommand, Archivarius};
 use crate::prelude::{EntityId, EntityType, SerializedEntity};
 
 use self::storage::Volume;
@@ -28,16 +28,17 @@ pub struct VolumeKeeper {
     write_down_reminder: Option<SpawnHandle>,
     range_start: EntityId,
     range_end: Option<EntityId>,
-    //    master: Addr<Archivarius>,
+    master: Addr<Archivarius>,
 }
 
 impl VolumeKeeper {
-    pub fn in_memory(ty: EntityType, i: i32, from: EntityId, to: Option<EntityId>) -> VolumeKeeper {
+    pub(super) fn in_memory(master: Addr<Archivarius>, ty: EntityType, i: i32, from: EntityId, to: Option<EntityId>) -> VolumeKeeper {
         let to = to.map(|to| {
             assert!(to > from);
             to
         });
         VolumeKeeper {
+            master,
             i,
             storage: Some(Volume::new_open(
                 ty,
@@ -50,13 +51,14 @@ impl VolumeKeeper {
         }
     }
 
-    pub fn persistent(ty: EntityType, i: i32, from: EntityId, to: Option<EntityId>) -> Self {
+    pub(super) fn persistent(master: Addr<Archivarius>, ty: EntityType, i: i32, from: EntityId, to: Option<EntityId>) -> Self {
         let to = to.map(|to| {
             assert!(to > from);
             to
         });
 
         VolumeKeeper {
+            master,
             i,
             storage: Some(Volume::new_closed(
                 ty,

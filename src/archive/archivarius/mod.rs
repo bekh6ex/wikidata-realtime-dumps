@@ -39,12 +39,12 @@ pub(crate) struct Archivarius {
 }
 
 impl Archivarius {
-    pub fn new(ty: EntityType, arbiters: ArbiterPool) -> Archivarius {
+    pub fn new(ty: EntityType, arbiters: ArbiterPool, self_address: Addr<Archivarius>) -> Archivarius {
         let store = ArchivariusStore::new(format!("wd-rt-dumps/{:?}/archivarius.json", ty));
 
         let state = store.load().unwrap_or_default();
 
-        Self::new_initialized(ty, store, state, arbiters)
+        Self::new_initialized(ty, store, state, arbiters, self_address)
     }
 
     fn new_initialized(
@@ -52,6 +52,7 @@ impl Archivarius {
         store: ArchivariusStore<String>,
         state: StoredState,
         arbiters: ArbiterPool,
+        self_address: Addr<Archivarius>,
     ) -> Archivarius {
         let closed_actors = state
             .closed
@@ -59,8 +60,9 @@ impl Archivarius {
             .enumerate()
             .map(|(id, er)| {
                 let range = er.clone();
+                let self_address = self_address.clone();
                 let vol = VolumeKeeper::start_in_arbiter(arbiters.next().as_ref(), move |_| {
-                    volume::VolumeKeeper::persistent(ty, id as i32, *range.inner.start(), Some(*range.inner.end()))
+                    volume::VolumeKeeper::persistent(self_address, ty, id as i32, *range.inner.start(), Some(*range.inner.end()))
                 });
 
                 (er.clone(), vol)
@@ -73,9 +75,9 @@ impl Archivarius {
 
         let open_actor = VolumeKeeper::start_in_arbiter(arbiters.next().as_ref(), move |_| {
             if initialized {
-                VolumeKeeper::persistent(ty, new_id as i32, start_id_for_new_volume, None)
+                VolumeKeeper::persistent(self_address, ty, new_id as i32, start_id_for_new_volume, None)
             } else {
-                VolumeKeeper::in_memory(ty, new_id as i32,start_id_for_new_volume, None)
+                VolumeKeeper::in_memory(self_address, ty, new_id as i32,start_id_for_new_volume, None)
             }
         });
 
@@ -143,7 +145,7 @@ impl Archivarius {
         }
     }
 
-    fn close_current_open_actor(&mut self) {
+    fn close_current_open_actor(&mut self, self_addr: Addr<Self>) {
         let new_id = self.finished_volumes.len() + 1;
 
         let ty = self.ty;
@@ -164,9 +166,9 @@ impl Archivarius {
         let new_open_actor =
             VolumeKeeper::start_in_arbiter(self.arbiters.next().as_ref(), move |_| {
                 if initializing {
-                    VolumeKeeper::in_memory(ty, new_id as i32, range_start_for_new_volume, None)
+                    VolumeKeeper::in_memory(self_addr,ty, new_id as i32, range_start_for_new_volume, None)
                 } else {
-                    VolumeKeeper::persistent(ty, new_id as i32,range_start_for_new_volume, None)
+                    VolumeKeeper::persistent(self_addr, ty, new_id as i32,range_start_for_new_volume, None)
                 }
             });
 
@@ -339,12 +341,12 @@ impl Message for CloseOpenActor {
 impl Handler<CloseOpenActor> for Archivarius {
     type Result = MessageResult<CloseOpenActor>;
 
-    fn handle(&mut self, msg: CloseOpenActor, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: CloseOpenActor, ctx: &mut Self::Context) -> Self::Result {
         if self.open_volume != msg.addr {
             return MessageResult(());
         }
 
-        self.close_current_open_actor();
+        self.close_current_open_actor(ctx.address());
 
         MessageResult(())
     }
