@@ -525,7 +525,7 @@ struct StoredState {
     closed: Vec<EntityRange>,
     open_volume_last_entity_id: Option<EntityId>,
     last_processed_event_id: Option<EventId>,
-    initialized: bool, //TODO Should be Option<last event Id> from event stream
+    initialized: bool,
 }
 
 impl Default for StoredState {
