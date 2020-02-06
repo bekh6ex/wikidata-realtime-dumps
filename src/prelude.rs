@@ -90,7 +90,7 @@ impl EntityId {
     pub fn n(self) -> u32 {
         self.id
     }
-    pub fn next(self) -> EntityId {
+    pub fn next(&self) -> EntityId {
         EntityId {
             ty: self.ty,
             id: self.id + 1,

@@ -1,36 +1,42 @@
-use crate::archive::UpdateChunkCommand;
+use std::collections::{BTreeMap, BTreeSet};
+use std::time::Duration;
+
 use actix::{Actor, AsyncContext, Context, Handler, Message, MessageResult, SpawnHandle};
 use bytes::Bytes;
-
 use log::*;
 
-use crate::prelude::{EntityId, EntityType, SerializedEntity};
 use storage::GzippedData;
+use storage::VolumeStorage;
 
-use std::collections::{BTreeMap, BTreeSet};
-
-mod storage;
+use crate::archive::UpdateChunkCommand;
+use crate::prelude::{EntityId, EntityType, SerializedEntity};
 
 use self::storage::Volume;
 
-use std::time::Duration;
-use storage::VolumeStorage;
+mod storage;
 
 #[allow(dead_code)]
 const MAX_CHUNK_SIZE: usize = 44 * 1024 * 1024;
+
+// Delay between receiving the last message and storing it
+const WRITE_DOWN_DELAY: Duration = Duration::from_secs(2);
 
 pub struct VolumeKeeper {
     i: i32,
     storage: Option<Volume>,
     command_buffer: Vec<UpdateChunkCommand>,
     write_down_reminder: Option<SpawnHandle>,
-    //    range_start: EntityId,
-    //    range_end: Option<EntityId>,
+    range_start: EntityId,
+    range_end: Option<EntityId>,
     //    master: Addr<Archivarius>,
 }
 
 impl VolumeKeeper {
-    pub fn in_memory(ty: EntityType, i: i32) -> VolumeKeeper {
+    pub fn in_memory(ty: EntityType, i: i32, from: EntityId, to: Option<EntityId>) -> VolumeKeeper {
+        let to = to.map(|to| {
+            assert!(to > from);
+            to
+        });
         VolumeKeeper {
             i,
             storage: Some(Volume::new_open(
@@ -39,10 +45,17 @@ impl VolumeKeeper {
             )),
             command_buffer: vec![],
             write_down_reminder: None,
+            range_start: from,
+            range_end: to,
         }
     }
 
-    pub fn persistent(ty: EntityType, i: i32) -> Self {
+    pub fn persistent(ty: EntityType, i: i32, from: EntityId, to: Option<EntityId>) -> Self {
+        let to = to.map(|to| {
+            assert!(to > from);
+            to
+        });
+
         VolumeKeeper {
             i,
             storage: Some(Volume::new_closed(
@@ -51,6 +64,8 @@ impl VolumeKeeper {
             )),
             command_buffer: vec![],
             write_down_reminder: None,
+            range_start: from,
+            range_end: to,
         }
     }
 
@@ -106,12 +121,12 @@ impl VolumeKeeper {
             })
     }
 
-    //    fn in_the_range(&self, id: EntityId) -> bool {
-    //        match self.range_end {
-    //            None => id >= self.range_start,
-    //            Some(range_end) => id >= self.range_start && id <= range_end,
-    //        }
-    //    }
+    fn in_the_range(&self, id: EntityId) -> bool {
+        match self.range_end {
+            None => id >= self.range_start,
+            Some(range_end) => id >= self.range_start && id <= range_end,
+        }
+    }
 
     #[allow(dead_code)]
     fn finish_the_volume() {}
@@ -124,7 +139,7 @@ impl VolumeKeeper {
             None => (),
         };
 
-        let handle = ctx.notify_later(WriteDown, Duration::from_secs(10));
+        let handle = ctx.notify_later(WriteDown, WRITE_DOWN_DELAY);
         self.write_down_reminder.replace(handle);
     }
 }
@@ -133,9 +148,9 @@ impl Handler<UpdateChunkCommand> for VolumeKeeper {
     type Result = MessageResult<UpdateChunkCommand>;
 
     fn handle(&mut self, msg: UpdateChunkCommand, ctx: &mut Self::Context) -> Self::Result {
-        //        if !self.in_the_range(msg.entity.id) {
-        //            self.master.do_send(Redeliver(msg))
-        //        }
+        if !self.in_the_range(msg.entity_id()) {
+//            self.master.do_send(Redeliver(msg))
+        }
         debug!(
             "UpdateCommand[actor_id={}]: entity_id={}",
             self.i,
@@ -171,13 +186,25 @@ impl Actor for VolumeKeeper {
 
 #[derive(Message)]
 #[rtype(result = "()")]
-pub struct Persist;
+pub enum Persist {
+    JustPersist,
+    Close{ range_end: EntityId }
+}
 
 impl Handler<Persist> for VolumeKeeper {
     type Result = MessageResult<Persist>;
 
-    fn handle(&mut self, _msg: Persist, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: Persist, _ctx: &mut Self::Context) -> Self::Result {
         self.close_storage();
+        match msg {
+            Persist::JustPersist => {
+                // Already done
+            },
+            Persist::Close { range_end } => {
+                assert!(self.range_end.is_none());
+                self.range_end = Some(range_end)
+            },
+        }
         MessageResult(())
     }
 }

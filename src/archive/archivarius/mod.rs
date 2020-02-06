@@ -59,8 +59,9 @@ impl Archivarius {
             .iter()
             .enumerate()
             .map(|(id, er)| {
+                let range = er.clone();
                 let vol = VolumeKeeper::start_in_arbiter(arbiters.next().as_ref(), move |_| {
-                    volume::VolumeKeeper::persistent(ty, id as i32)
+                    volume::VolumeKeeper::persistent(ty, id as i32, *range.inner.start(), Some(*range.inner.end()))
                 });
 
                 (er.clone(), vol)
@@ -69,12 +70,13 @@ impl Archivarius {
         let new_id = closed_actors.len();
         let last_id_to_open_actor: Option<EntityId> = state.open_volume_last_entity_id;
         let initialized = state.initialized;
+        let start_id_for_new_volume = last_id_to_open_actor.unwrap_or(ty.id(1));
 
         let open_actor = VolumeKeeper::start_in_arbiter(arbiters.next().as_ref(), move |_| {
             if initialized {
-                VolumeKeeper::persistent(ty, new_id as i32)
+                VolumeKeeper::persistent(ty, new_id as i32, start_id_for_new_volume, None)
             } else {
-                VolumeKeeper::in_memory(ty, new_id as i32)
+                VolumeKeeper::in_memory(ty, new_id as i32,start_id_for_new_volume, None)
             }
         });
 
@@ -148,31 +150,36 @@ impl Archivarius {
         let ty = self.ty;
         let initializing = self.initialization_in_progress();
 
+        let last_id_to_open_volume = self
+            .last_id_to_open_actor
+            .expect("Closed an empty open actor");
+
+        let new_range = self
+            .closed_actors
+            .last()
+            .map(|(last_range, _)| last_range.next_adjacent(last_id_to_open_volume))
+            .unwrap_or_else(|| EntityRange::from_start(last_id_to_open_volume));
+
+        let range_start_for_new_volume = new_range.inner.end().next();
+
         let new_open_actor =
             VolumeKeeper::start_in_arbiter(self.arbiters.next().as_ref(), move |_| {
                 if initializing {
-                    VolumeKeeper::in_memory(ty, new_id as i32)
+                    VolumeKeeper::in_memory(ty, new_id as i32, range_start_for_new_volume, None)
                 } else {
-                    VolumeKeeper::persistent(ty, new_id as i32)
+                    VolumeKeeper::persistent(ty, new_id as i32,range_start_for_new_volume, None)
                 }
             });
 
         let old_open_actor = replace(&mut self.open_actor, new_open_actor);
 
+        // TODO Set end ID for last actor
+
         if self.initialization_in_progress() {
             info!("Sending command to persist the chunk");
-            old_open_actor.do_send(volume::Persist);
+            old_open_actor.do_send(volume::Persist::Close {range_end: last_id_to_open_volume });
             // TODO: Must await Persist response to sore Archivarius state
         }
-
-        let top_id = self
-            .last_id_to_open_actor
-            .expect("Closed an empty open actor");
-        let new_range = self
-            .closed_actors
-            .last()
-            .map(|(last_range, _)| last_range.next_adjacent(top_id))
-            .unwrap_or_else(|| EntityRange::from_start(top_id));
 
         self.closed_actors.push((new_range, old_open_actor));
 
@@ -318,7 +325,7 @@ impl Handler<InitializationFinished> for Archivarius {
         self.everything_is_persisted = true;
 
         info!("Initialization finished. Sending command to persist the chunk of an open actor");
-        self.open_actor.do_send(volume::Persist);
+        self.open_actor.do_send(volume::Persist::JustPersist);
 
         Arc::new(())
     }
