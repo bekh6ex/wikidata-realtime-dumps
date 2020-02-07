@@ -15,14 +15,9 @@ use self::storage::Volume;
 
 mod storage;
 
-#[allow(dead_code)]
-const MAX_CHUNK_SIZE: usize = 44 * 1024 * 1024;
-
-// Delay between receiving the last message and storing it
-const WRITE_DOWN_DELAY: Duration = Duration::from_secs(2);
-
 pub struct VolumeKeeper {
     i: i32,
+    config: VolumeKeeperConfig,
     storage: Option<Volume>,
     command_buffer: Vec<UpdateChunkCommand>,
     write_down_reminder: Option<SpawnHandle>,
@@ -32,7 +27,7 @@ pub struct VolumeKeeper {
 }
 
 impl VolumeKeeper {
-    pub(super) fn in_memory(root_path: String, master: Addr<Archivarius>, ty: EntityType, i: i32, from: EntityId, to: Option<EntityId>) -> VolumeKeeper {
+    pub(super) fn in_memory(root_path: String, config: VolumeKeeperConfig, master: Addr<Archivarius>, ty: EntityType, i: i32, from: EntityId, to: Option<EntityId>) -> VolumeKeeper {
         let to = to.map(|to| {
             assert!(to > from);
             to
@@ -40,6 +35,7 @@ impl VolumeKeeper {
         VolumeKeeper {
             master,
             i,
+            config,
             storage: Some(Volume::new_open(
                 ty,
                 format!("{}/{}.gz", root_path, i),
@@ -51,7 +47,7 @@ impl VolumeKeeper {
         }
     }
 
-    pub(super) fn persistent(root_path: String, master: Addr<Archivarius>, ty: EntityType, i: i32, from: EntityId, to: Option<EntityId>) -> Self {
+    pub(super) fn persistent(root_path: String, config: VolumeKeeperConfig, master: Addr<Archivarius>, ty: EntityType, i: i32, from: EntityId, to: Option<EntityId>) -> Self {
         let to = to.map(|to| {
             assert!(to > from);
             to
@@ -60,6 +56,7 @@ impl VolumeKeeper {
         VolumeKeeper {
             master,
             i,
+            config,
             storage: Some(Volume::new_closed(
                 ty,
                 format!("{}/{}.gz", root_path, i),
@@ -141,8 +138,25 @@ impl VolumeKeeper {
             None => (),
         };
 
-        let handle = ctx.notify_later(WriteDown, WRITE_DOWN_DELAY);
+        let handle = ctx.notify_later(WriteDown, self.config.write_down_delay.clone());
         self.write_down_reminder.replace(handle);
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct VolumeKeeperConfig {
+    /// Size of volume in bytes after which VolumeKeeper should finish the volume
+    pub max_volume_size: usize,
+    /// Delay between receiving the last message and persisting the state
+    pub write_down_delay: Duration,
+}
+
+impl Default for VolumeKeeperConfig {
+    fn default() -> Self {
+        VolumeKeeperConfig {
+            max_volume_size: 44 * 1024 * 1024,
+            write_down_delay: Duration::from_secs(2),
+        }
     }
 }
 

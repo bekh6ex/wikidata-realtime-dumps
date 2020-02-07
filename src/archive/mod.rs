@@ -12,6 +12,7 @@ use std::pin::Pin;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use self::archivarius::VolumeKeeperConfig;
 
 pub(crate) use self::archivarius::{Archivarius, Initialization, QueryState};
 
@@ -112,7 +113,13 @@ pub(super) fn start(types: Vec<EntityType>) -> ArchivariusMap {
         let ty = *ty;
         let arbiter_pool = arbiter_pool.clone();
         let act = Archivarius::start_in_arbiter(&arbiter, move |ctx| {
-            Archivarius::new("wd-rt-dumps", ty, arbiter_pool.clone(), ctx.address())
+            Archivarius::new(
+                "wd-rt-dumps",
+                ty,
+                VolumeKeeperConfig::default(),
+                arbiter_pool.clone(),
+                ctx.address()
+            )
         });
         (ty, act)
     });

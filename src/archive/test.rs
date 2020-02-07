@@ -13,6 +13,7 @@ use crate::events::EventId;
 use crate::prelude::{EntityType, RevisionId, SerializedEntity};
 
 use proptest_attr_macro::proptest;
+use crate::archive::archivarius::VolumeKeeperConfig;
 
 #[proptest]
 fn just_initialized_archivarius_should_return_item_from_dump(id: u32) {
@@ -62,7 +63,7 @@ fn with_temp_dir<Fn, Fut>(f: Fn)
 
 fn item_archivarius(dir: String) -> Addr<Archivarius> {
     Archivarius::create(|ctx| {
-        Archivarius::new(&dir, EntityType::Item, pool(), ctx.address())
+        Archivarius::new(&dir, EntityType::Item, VolumeKeeperConfig::default(),pool(), ctx.address())
     })
 }
 

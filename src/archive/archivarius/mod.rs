@@ -18,13 +18,14 @@ use crate::prelude::*;
 
 use self::volume::{GetChunk, VolumeKeeper};
 
+pub use self::volume::{VolumeKeeperConfig};
+
 mod tracker;
 mod volume;
 
-const MAX_CHUNK_SIZE: usize = 44 * 1024 * 1024;
-//const MAX_CHUNK_SIZE: usize = 5 * 1024 * 1024;
 
 pub(crate) struct Archivarius {
+    volume_keeper_config: VolumeKeeperConfig,
     store: ArchivariusStore,
     ty: EntityType,
     everything_is_persisted: bool,
@@ -37,16 +38,17 @@ pub(crate) struct Archivarius {
 }
 
 impl Archivarius {
-    pub fn new(root_path: &str, ty: EntityType, arbiters: ArbiterPool, self_address: Addr<Archivarius>) -> Archivarius {
+    pub fn new(root_path: &str, ty: EntityType, volume_keeper_config: VolumeKeeperConfig, arbiters: ArbiterPool, self_address: Addr<Archivarius>) -> Archivarius {
         let store = ArchivariusStore::new(root_path, ty);
 
         let state = store.load().unwrap_or_default();
 
-        Self::new_initialized(ty, store, state, arbiters, self_address)
+        Self::new_initialized(ty, volume_keeper_config, store, state, arbiters, self_address)
     }
 
     fn new_initialized(
         ty: EntityType,
+        volume_keeper_config: VolumeKeeperConfig,
         store: ArchivariusStore,
         state: StoredState,
         arbiters: ArbiterPool,
@@ -61,8 +63,9 @@ impl Archivarius {
                 let volume_root_path = volume_root_path.clone();
                 let range = er.clone();
                 let self_address = self_address.clone();
+                let volume_keeper_config = volume_keeper_config.clone();
                 let vol = VolumeKeeper::start_in_arbiter(arbiters.next().as_ref(), move |_| {
-                    volume::VolumeKeeper::persistent(volume_root_path, self_address, ty, id as i32, *range.inner.start(), Some(*range.inner.end()))
+                    volume::VolumeKeeper::persistent(volume_root_path, volume_keeper_config, self_address, ty, id as i32, *range.inner.start(), Some(*range.inner.end()))
                 });
 
                 (er.clone(), vol)
@@ -73,11 +76,14 @@ impl Archivarius {
         let initialized = state.initialized;
         let start_id_for_new_volume = last_id_to_open_actor.unwrap_or(ty.id(1));
 
-        let open_actor = VolumeKeeper::start_in_arbiter(arbiters.next().as_ref(), move |_| {
-            if initialized {
-                VolumeKeeper::persistent(volume_root_path.clone(),self_address, ty, new_id as i32, start_id_for_new_volume, None)
-            } else {
-                VolumeKeeper::in_memory(volume_root_path.clone(),self_address, ty, new_id as i32,start_id_for_new_volume, None)
+        let open_actor = VolumeKeeper::start_in_arbiter(arbiters.next().as_ref(), {
+            let volume_keeper_config = volume_keeper_config.clone();
+            move |_| {
+                if initialized {
+                    VolumeKeeper::persistent(volume_root_path.clone(), volume_keeper_config, self_address, ty, new_id as i32, start_id_for_new_volume, None)
+                } else {
+                    VolumeKeeper::in_memory(volume_root_path.clone(), volume_keeper_config, self_address, ty, new_id as i32, start_id_for_new_volume, None)
+                }
             }
         });
 
@@ -87,6 +93,7 @@ impl Archivarius {
         );
 
         Archivarius {
+            volume_keeper_config,
             store,
             ty,
             everything_is_persisted: initialized,
@@ -130,14 +137,14 @@ impl Archivarius {
         }
     }
 
-    fn maybe_close_the_open_volume(self_addr: &Addr<Self>, child: Addr<VolumeKeeper>, size: usize) {
-        if size > MAX_CHUNK_SIZE {
+    fn maybe_close_the_open_volume(self_addr: &Addr<Self>, max_chunk_size: usize, child: Addr<VolumeKeeper>, size: usize) {
+        if size > max_chunk_size {
             debug!("Schedule the open actor closing. chunk_size={}", size);
             self_addr.do_send(CloseOpenActor { addr: child });
 
-            if size > MAX_CHUNK_SIZE * 2 {
+            if size > max_chunk_size * 2 {
                 warn!("Size of a chunk is way too big: {}", size)
-            } else if size > MAX_CHUNK_SIZE * 10 {
+            } else if size > max_chunk_size * 10 {
                 panic!("Size of a chunk is way too big: {}", size)
             }
         } else {
@@ -166,11 +173,14 @@ impl Archivarius {
         let range_start_for_new_volume = new_range.inner.end().next();
 
         let new_open_actor =
-            VolumeKeeper::start_in_arbiter(self.arbiters.next().as_ref(), move |_| {
-                if initializing {
-                    VolumeKeeper::in_memory(volume_root_path.clone(), self_addr,ty, new_id as i32, range_start_for_new_volume, None)
-                } else {
-                    VolumeKeeper::persistent(volume_root_path.clone(),self_addr, ty, new_id as i32,range_start_for_new_volume, None)
+            VolumeKeeper::start_in_arbiter(self.arbiters.next().as_ref(), {
+                let volume_keeper_config = self.volume_keeper_config.clone();
+                move |_| {
+                    if initializing {
+                        VolumeKeeper::in_memory(volume_root_path.clone(), volume_keeper_config,self_addr,ty, new_id as i32, range_start_for_new_volume, None)
+                    } else {
+                        VolumeKeeper::persistent(volume_root_path.clone(),volume_keeper_config,self_addr, ty, new_id as i32,range_start_for_new_volume, None)
+                    }
                 }
             });
 
@@ -287,6 +297,8 @@ impl Handler<UpdateCommand> for Archivarius {
 
         let result: UnitFuture = match msg {
             UpdateCommand::UpdateCommand { entity, event_id } => {
+                let max_chunk_size = self.volume_keeper_config.max_volume_size;
+
                 Box::pin(async move {
                     let result = child.send(UpdateChunkCommand::Update { entity });
 
@@ -296,7 +308,7 @@ impl Handler<UpdateCommand> for Archivarius {
                     self_addr.do_send(UpdateLastEventEventId(event_id));
 
                     if is_open_actor {
-                        Self::maybe_close_the_open_volume(&self_addr, child, size);
+                        Self::maybe_close_the_open_volume(&self_addr, max_chunk_size, child, size);
                     }
                 })
             }
@@ -443,12 +455,13 @@ impl Handler<Initialization> for Archivarius {
                     self.last_id_to_open_actor = Some(id);
                 }
 
+                let max_chunk_size = self.volume_keeper_config.max_volume_size;
                 let result: UnitFuture = Box::pin(async move {
                     let result = child.send(UpdateChunkCommand::Update { entity });
                     let size = result.await.expect("Communication with child failed");
 
                     if is_open_actor {
-                        Self::maybe_close_the_open_volume(&self_addr, child, size);
+                        Self::maybe_close_the_open_volume(&self_addr, max_chunk_size, child, size);
                     }
                 });
                 MessageResult(result)
