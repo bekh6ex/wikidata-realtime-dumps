@@ -1,5 +1,5 @@
 use std::io::Read;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH, Duration};
 
 use actix::prelude::*;
 use actix_rt;
@@ -63,7 +63,11 @@ fn with_temp_dir<Fn, Fut>(f: Fn)
 
 fn item_archivarius(dir: String) -> Addr<Archivarius> {
     Archivarius::create(|ctx| {
-        Archivarius::new(&dir, EntityType::Item, VolumeKeeperConfig::default(),pool(), ctx.address())
+        let config = VolumeKeeperConfig{
+            max_volume_size: 0, // Each entity goes into separate volume
+            write_down_delay: Duration::from_millis(1),
+        };
+        Archivarius::new(&dir, EntityType::Item, config, pool(), ctx.address())
     })
 }
 
