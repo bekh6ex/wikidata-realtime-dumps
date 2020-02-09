@@ -39,7 +39,8 @@ async fn main() -> std::io::Result<()> {
 
     // TODO: Lock storage file
 
-    let types = vec![EntityType::Lexeme, EntityType::Property, EntityType::Item];
+//    let types = vec![EntityType::Lexeme, EntityType::Property, EntityType::Item];
+    let types = vec![EntityType::Item];
 
     let map: ArchivariusMap = start(types);
 
