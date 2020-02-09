@@ -1,13 +1,20 @@
-refresh_rate: 30 seconds
+refresh_rate: 5 seconds
 
 appenders:
   stdout:
     kind: console
+  warn_file:
+    kind: file
+    path: "log/warn.log"
+    filters:
+      - { kind: "threshold", level: "warn" }
+
 
 root:
   level: info
   appenders:
     - stdout
+    - warn_file
 
 loggers:
   wikidata_realtime_dumps:
