@@ -400,10 +400,17 @@ impl EventData {
                 let serialized_entity_fut = client.get_entity(id, Some(revision_id));
                 let command_fut = serialized_entity_fut.map(move |o: Option<SerializedEntity>| {
                     let serialized_entity = o.unwrap_or_else(|| {
-                        panic!(
+                        error!(
                             "Should always present. Not found: {:?} {:?}",
                             id, revision_id
-                        )
+                        );
+                        // TODO: Fix this hack. Should be none
+                        let data = format!(r#"{{"id":"{}", "lastrevid":{}}}"#, id, revision_id.0);
+                        SerializedEntity{
+                            id,
+                            revision: revision_id,
+                            data,
+                        }
                     });
                     UpdateCommand::UpdateCommand {
                         event_id,
