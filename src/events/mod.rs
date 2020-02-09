@@ -87,6 +87,8 @@ pub async fn update_command_stream(
     event_id: EventId,
 ) -> impl Stream<Item = UpdateCommand> {
 
+    let event_id = event_id.rewind(Duration::from_secs(20)); // Due to the current VolumeKeeper batching implementation
+
     get_wikidata_event_stream(Some(event_id), ty)
         .await
         .filter_map(move |event: ProperEvent| {
