@@ -87,9 +87,7 @@ impl GetEntityClient {
         id: EntityId,
         rev: Option<RevisionId>,
     ) -> Result<Option<GetEntityResult>, Error> {
-        futures::compat::Compat01As03::new(self.rate_pool.queue())
-            .await
-            .unwrap();
+        self.rate_pool.queue().await;
 
         let url = if let Some(RevisionId(rev)) = rev {
             format!(

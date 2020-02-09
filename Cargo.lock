@@ -742,7 +742,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "futures-timer"
-version = "3.0.0"
+version = "3.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -1930,14 +1930,12 @@ dependencies = [
 [[package]]
 name = "stream_throttle"
 version = "0.2.1"
-source = "git+https://github.com/bekh6ex/stream-throttle.git?branch=use-futures-timer#fa1a1d442e23bacf06077b1580a22c59e869dc8a"
+source = "git+https://github.com/mikecaines/stream-throttle.git?branch=custom-timer2#610512c6fc0021520068e88737ac1329b8c22f1a"
 dependencies = [
- "failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "failure_derive 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "futures 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)",
- "futures-timer 3.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "futures-util 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures-timer 3.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "pin-utils 0.1.0-alpha.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2422,7 +2420,7 @@ dependencies = [
  "serde_json 1.0.45 (registry+https://github.com/rust-lang/crates.io-index)",
  "sorted_stream 0.1.0",
  "sse-codec 0.1.0 (git+https://github.com/bekh6ex/sse-codec.git?branch=fix-stream-bug)",
- "stream_throttle 0.2.1 (git+https://github.com/bekh6ex/stream-throttle.git?branch=use-futures-timer)",
+ "stream_throttle 0.2.1 (git+https://github.com/mikecaines/stream-throttle.git?branch=custom-timer2)",
  "warp 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -2570,7 +2568,7 @@ dependencies = [
 "checksum futures-task 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "0bae52d6b29cf440e298856fec3965ee6fa71b06aa7495178615953fd669e5f9"
 "checksum futures-test 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "21f91b8d7256459b7e531fa3333614879e75d70644793206a124b5f33c6ff796"
 "checksum futures-timer 2.0.2 (registry+https://github.com/rust-lang/crates.io-index)" = "a1de7508b218029b0f01662ed8f61b1c964b3ae99d6f25462d0f55a595109df6"
-"checksum futures-timer 3.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "ca1dcc4e4637676fcc27629d9805567be878595c3ffab0372ff1eae3b07bffff"
+"checksum futures-timer 3.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "3de1a2b2a2a33d9e60e17980b60ee061eeaae96a5abe9121db0fdb9af167a1c5"
 "checksum futures-util 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "c0d66274fb76985d3c62c886d1da7ac4c0903a8c9f754e8fe0f35a6a6cc39e76"
 "checksum futures_codec 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)" = "a0a73299e4718f5452e45980fc1d6957a070abe308d3700b63b8673f47e1c2b3"
 "checksum fxhash 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "c31b6d751ae2c7f11320402d34e41349dd1016f8d5d45e48c4312bc8625af50c"
@@ -2704,7 +2702,7 @@ dependencies = [
 "checksum sourcefile 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)" = "4bf77cb82ba8453b42b6ae1d692e4cdc92f9a47beaf89a847c8be83f4e328ad3"
 "checksum spin 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)" = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
 "checksum sse-codec 0.1.0 (git+https://github.com/bekh6ex/sse-codec.git?branch=fix-stream-bug)" = "<none>"
-"checksum stream_throttle 0.2.1 (git+https://github.com/bekh6ex/stream-throttle.git?branch=use-futures-timer)" = "<none>"
+"checksum stream_throttle 0.2.1 (git+https://github.com/mikecaines/stream-throttle.git?branch=custom-timer2)" = "<none>"
 "checksum syn 0.15.44 (registry+https://github.com/rust-lang/crates.io-index)" = "9ca4b3b69a77cbe1ffc9e198781b7acb0c7365a883670e8f1c1bc66fba79a5c5"
 "checksum syn 1.0.14 (registry+https://github.com/rust-lang/crates.io-index)" = "af6f3550d8dff9ef7dc34d384ac6f107e5d31c8f57d9f28e0081503f547ac8f5"
 "checksum synstructure 0.12.3 (registry+https://github.com/rust-lang/crates.io-index)" = "67656ea1dc1b41b1451851562ea232ec2e5a80242139f7e679ceccfb5d61f545"

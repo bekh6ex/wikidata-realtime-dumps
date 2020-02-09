@@ -42,7 +42,7 @@ futures-timer = "2.0.2"
 num_cpus = "1.12.0"
 continuous_download = { path="continuous_download"}
 sorted_stream = { path="sorted_stream"}
-stream_throttle = { git="https://github.com/bekh6ex/stream-throttle.git", branch="use-futures-timer"}
+stream_throttle = { git="https://github.com/mikecaines/stream-throttle.git", branch="custom-timer2" , default-features = false, features=['timer-futures-timer']}
 
 [dev-dependencies]
 futures-test = "0.3.1"
