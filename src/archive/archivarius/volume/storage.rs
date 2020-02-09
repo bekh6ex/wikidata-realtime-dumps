@@ -234,7 +234,7 @@ impl GzippedData {
         use flate2::write::GzEncoder;
         use flate2::Compression;
         use std::io::Write;
-        let mut encoder = GzEncoder::new(Vec::with_capacity(data.len() / 5), Compression::new(7));
+        let mut encoder = GzEncoder::new(Vec::with_capacity(data.len() / 5), Compression::new(3));
         encoder.write_all(data.as_bytes()).unwrap();
 
         GzippedData {
