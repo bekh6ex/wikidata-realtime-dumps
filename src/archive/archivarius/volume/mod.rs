@@ -24,6 +24,7 @@ pub struct VolumeKeeper {
     range_start: EntityId,
     range_end: Option<EntityId>,
     master: Addr<Archivarius>,
+    volume_size: Option<usize>,
 }
 
 impl VolumeKeeper {
@@ -44,6 +45,7 @@ impl VolumeKeeper {
             write_down_reminder: None,
             range_start: from,
             range_end: to,
+            volume_size: None,
         }
     }
 
@@ -65,6 +67,7 @@ impl VolumeKeeper {
             write_down_reminder: None,
             range_start: from,
             range_end: to,
+            volume_size: None,
         }
     }
 
@@ -83,7 +86,7 @@ impl VolumeKeeper {
     }
 
     fn apply_changes(&mut self, commands: Vec<UpdateChunkCommand>) -> usize {
-        self.storage()
+        let size = self.storage()
             .change(move |entities: &mut BTreeMap<EntityId, SerializedEntity>| {
                 for msg in commands {
                     if entities.contains_key(&msg.entity_id()) {
@@ -117,7 +120,10 @@ impl VolumeKeeper {
                         }
                     }
                 }
-            })
+            });
+        self.volume_size = Some(size);
+
+        size
     }
 
     fn in_the_range(&self, id: EntityId) -> bool {
@@ -173,9 +179,23 @@ impl Handler<UpdateChunkCommand> for VolumeKeeper {
             msg.entity_id()
         );
 
-        //        self.command_buffer.push(msg.clone());
+        self.command_buffer.push(msg.clone());
 
-        let new_raw_size = self.apply_changes(vec![msg]);
+        let new_raw_size = if self.command_buffer.len() >= 20 {
+            let buffer = core::mem::replace(&mut self.command_buffer, vec![]);
+            self.apply_changes(buffer)
+        } else {
+            match self.volume_size {
+                None => {
+                    let buffer = core::mem::replace(&mut self.command_buffer, vec![]);
+                    self.apply_changes(buffer)
+                },
+                Some(size) => {
+                    size
+                },
+            }
+        };
+
 
         self.remind_to_write_down(ctx);
 
