@@ -89,7 +89,7 @@ impl VolumeKeeper {
                     if entities.contains_key(&msg.entity_id()) {
                         let current_revision = entities.get(&msg.entity_id()).unwrap().revision;
                         if current_revision > msg.revision() {
-                            warn!(
+                            debug!(
                                 "Current revision is newer than one in command. {} {:?} {:?}",
                                 msg.message_type(),
                                 msg.entity_id(),
