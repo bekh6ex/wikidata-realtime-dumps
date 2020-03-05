@@ -23,7 +23,7 @@ Storing the state of Wikidata and updating it in "real-time" so every one can do
 
 TODO
 
-Dump format is new [line delimited JSON](http://ndjson.org/) in compressed with `gzip`.
+Dump format is [new line delimited JSON](http://ndjson.org/) in compressed with `gzip`.
 
 ## How does it work
 
