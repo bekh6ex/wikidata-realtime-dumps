@@ -11,7 +11,6 @@ members = ["continuous_download", "sorted_stream"]
 panic = 'abort'
 [profile.release]
 panic = 'abort'
-debug = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
