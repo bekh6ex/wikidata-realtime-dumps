@@ -35,7 +35,8 @@ async fn main() -> std::io::Result<()> {
 
     info!("Starting...");
 
-    let dump_config = get_dump_config();
+//    let dump_config: BTreeMap<EntityType, DumpConfig> = get_dump_config();
+    let dump_config: BTreeMap<EntityType, DumpConfig> = BTreeMap::new();
 
     // TODO: Lock storage file
 
