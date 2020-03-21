@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::convert::Infallible;
-use std::net::SocketAddrV4;
+use std::net::{SocketAddrV4, Ipv4Addr};
 use std::sync::Arc;
 
 use actix::Addr;
@@ -16,7 +16,10 @@ use crate::prelude::EntityType;
 pub(super) async fn start(ar: &Arc<BTreeMap<EntityType, Addr<Archivarius>>>) {
     let hello = get_dump_route(ar);
 
-    let ws = warp::serve(hello).run("0.0.0.0:80".parse::<SocketAddrV4>().unwrap());
+    let port: u16 = std::env::var("WD_PORT").unwrap_or("8080".into()).parse().expect("Invalid port. Should be u16");
+    let addr = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), port);
+
+    let ws = warp::serve(hello).run(addr);
     ws.await
 }
 
