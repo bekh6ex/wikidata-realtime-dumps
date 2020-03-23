@@ -157,7 +157,7 @@ async fn get_wikidata_event_stream(
             });
             once(open_new_sse_stream(id)).flatten()
         },
-        1000,
+        10_000,
     );
 
     let stream = stream.chunks(2).map(|ch: Vec<Event>| {
