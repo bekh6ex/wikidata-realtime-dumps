@@ -64,7 +64,11 @@ pub async fn get_current_event_id() -> EventId {
 async fn open_new_sse_stream(event_id: Option<String>) -> impl Stream<Item = Event> {
     use hyper::{Body, Client, Request};
 
-    let client = Client::builder().build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new());
+    let client = Client::builder()
+        .http2_keep_alive_interval(None)
+        .pool_max_idle_per_host(0)
+        .retry_canceled_requests(false)
+        .build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new());
 
     let mut req = Request::builder()
         .method("GET")

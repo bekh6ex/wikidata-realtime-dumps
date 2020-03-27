@@ -13,7 +13,11 @@ use serde::de::Deserialize;
 pub type Client = HyperClient<HttpsConnector<HttpConnector<GaiResolver>>, Body>;
 
 pub fn create_client() -> Client {
-    HyperClient::builder().build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new())
+    HyperClient::builder()
+        .http2_keep_alive_interval(None)
+        .pool_max_idle_per_host(0)
+        .retry_canceled_requests(false)
+        .build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new())
 }
 
 fn generate_session_id() -> String {
