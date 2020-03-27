@@ -45,7 +45,7 @@ impl GetEntityClient {
                 move |r: Result<Option<GetEntityResult>, Error>| {
                     r.map_err(move |e| {
                         match &e {
-                            Error::TooManyRequests => debug!("Too many requests"),
+                            Error::TooManyRequests => info!("Too many requests"),
                             Error::GetResponse(e) => info!("Response error: {:?}", e),
                             Error::ResponseFormat { cause, body } => {
                                 warn!("Wrong response format: {:?}. Body: {}", cause, body)
@@ -65,7 +65,7 @@ impl GetEntityClient {
             let strategy = Strategy::exponential(Duration::from_millis(5))
                 .with_jitter(true)
                 .with_max_delay(Duration::from_secs(5))
-                .with_max_retries(100)
+                .with_max_retries(5)
                 .retry(get_this_entity);
 
             strategy
