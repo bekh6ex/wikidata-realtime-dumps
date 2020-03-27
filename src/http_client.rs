@@ -15,6 +15,7 @@ pub type Client = HyperClient<HttpsConnector<HttpConnector<GaiResolver>>, Body>;
 pub fn create_client() -> Client {
     HyperClient::builder()
         .http2_keep_alive_interval(None)
+        .http2_only(true)
         .pool_max_idle_per_host(1)
         .build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new())
 }
