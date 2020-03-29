@@ -11,12 +11,13 @@ use serde::Deserialize;
 use serde_json::Value;
 use stream_throttle::{ThrottlePool, ThrottleRate};
 
-use crate::http_client::{create_client, get_json, Client, Error};
+use crate::http_client::{create_client, get_json, HClient, Error};
 use crate::prelude::*;
+use isahc::prelude::*;
 
 #[derive(Clone)]
 pub struct GetEntityClient {
-    client_pool: Vec<Arc<Client>>,
+    client_pool: Vec<Arc<HttpClient>>,
     pool_index: Arc<AtomicUsize>,
     rate_pool: ThrottlePool,
 }
@@ -77,7 +78,7 @@ impl GetEntityClient {
         }
     }
 
-    fn client(&self) -> &Client {
+    fn client(&self) -> &HttpClient {
         let index = self.pool_index.fetch_add(1, Ordering::Relaxed);
         &self.client_pool[index % self.client_pool.len()]
     }

@@ -14,7 +14,7 @@ use serde::Deserialize;
 use continuous_download::ContinuousDownloadStream;
 use sorted_stream::BufferedSortedStream;
 
-use crate::http_client::create_client;
+use crate::http_client::{create_client, create_hyper_client};
 use crate::init::{ArchiveFormat, DumpConfig, DumpFormat};
 use crate::prelude::*;
 use std::pin::Pin;
@@ -100,7 +100,7 @@ fn download_dump_with_restarts(
 }
 
 async fn json_stream(dump_config: DumpConfig) -> impl Stream<Item = String> {
-    let client1 = create_client();
+    let client1 = create_hyper_client();
     let client = client1;
 
     let stream = download_dump_with_restarts(client, dump_config.url.clone());
