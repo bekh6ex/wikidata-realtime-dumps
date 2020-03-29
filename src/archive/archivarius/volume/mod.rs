@@ -86,7 +86,7 @@ impl VolumeKeeper {
     }
 
     fn apply_changes(&mut self, commands: Vec<UpdateChunkCommand>) -> usize {
-        info!("VolumeKeeper({}:{}) applies {} commands",
+        info!("VolumeKeeper({:?}:{}) applies {} commands",
               self.range_start.ty(),
               self.i,
               commands.len());
