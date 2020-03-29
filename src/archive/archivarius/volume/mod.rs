@@ -1,14 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
-use actix::{Actor, AsyncContext, Context, Handler, Message, MessageResult, SpawnHandle, Addr};
+use actix::{Actor, Addr, AsyncContext, Context, Handler, Message, MessageResult, SpawnHandle};
 use bytes::Bytes;
 use log::*;
 
 use storage::GzippedData;
 use storage::VolumeStorage;
 
-use crate::archive::{UpdateChunkCommand, Archivarius};
+use crate::archive::{Archivarius, UpdateChunkCommand};
 use crate::prelude::{EntityId, EntityType, SerializedEntity};
 
 use self::storage::Volume;
@@ -86,6 +86,11 @@ impl VolumeKeeper {
     }
 
     fn apply_changes(&mut self, commands: Vec<UpdateChunkCommand>) -> usize {
+        info!("VolumeKeeper({}:{}) applies {} commands",
+              self.range_start.ty(),
+              self.i,
+              commands.len());
+
         let size = self.storage()
             .change(move |entities: &mut BTreeMap<EntityId, SerializedEntity>| {
                 for msg in commands {
