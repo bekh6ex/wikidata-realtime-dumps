@@ -136,7 +136,7 @@ impl GetEntityClient {
 
 impl Default for GetEntityClient {
     fn default() -> Self {
-        const MAX_CLIENTS: usize = 50;
+        const MAX_CLIENTS: usize = 20;
         let rate = ThrottleRate::new(300, Duration::from_millis(1000));
         let client_pool = GetEntityClient::new(NonZeroUsize::new(MAX_CLIENTS).unwrap(), rate);
         client_pool
