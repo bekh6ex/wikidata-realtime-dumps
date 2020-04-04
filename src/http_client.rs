@@ -27,7 +27,7 @@ pub fn create_client() -> HttpClient {
     use std::time::Duration;
 
     let client = HttpClient::builder()
-        .timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(20))
         .connect_timeout(Duration::from_secs(10))
         .redirect_policy(RedirectPolicy::None)
         .version_negotiation(VersionNegotiation::http2())
