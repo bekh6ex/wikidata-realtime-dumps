@@ -18,6 +18,9 @@ use crate::get_entity::GetEntityClient;
 
 use super::prelude::*;
 
+use isahc::prelude::*;
+
+
 mod event_stream;
 
 const WIKIDATA: &str = "wikidatawiki";
@@ -61,14 +64,27 @@ pub async fn get_current_event_id() -> EventId {
     get_top_event_id(None).await
 }
 
-async fn open_new_sse_stream(event_id: Option<String>) -> impl Stream<Item = Event> {
-    use hyper::{Body, Client, Request};
 
-    let client = Client::builder()
-        .http2_keep_alive_interval(None)
-        .pool_max_idle_per_host(0)
-        .retry_canceled_requests(false)
-        .build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new());
+
+pub fn create_client() -> HttpClient {
+    use isahc::config::{RedirectPolicy, VersionNegotiation};
+    use isahc::prelude::*;
+    use std::time::Duration;
+
+    let client = HttpClient::builder()
+        .timeout(Duration::from_secs(300))
+        .connect_timeout(Duration::from_secs(10))
+        .redirect_policy(RedirectPolicy::None)
+        .version_negotiation(VersionNegotiation::http2())
+        .build()
+        .unwrap();
+
+    client
+}
+
+async fn open_new_sse_stream(event_id: Option<String>) -> impl Stream<Item = Event> {
+
+    let client = create_client();
 
     let mut req = Request::builder()
         .method("GET")
@@ -80,7 +96,7 @@ async fn open_new_sse_stream(event_id: Option<String>) -> impl Stream<Item = Eve
 
     trace!("Sending request: {:?}", req);
 
-    let resp = client.request(req).await.unwrap();
+    let resp = client.send_async(req).await.unwrap();
 
     response_to_stream(resp, event_id)
 }

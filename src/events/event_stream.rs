@@ -7,7 +7,8 @@ use log::*;
 
 use sse_codec::{decode_stream, Event};
 
-use hyper::{Body, Response};
+use isahc::prelude::*;
+
 use std::fmt::Debug;
 
 pub(super) fn response_to_stream(
@@ -16,14 +17,7 @@ pub(super) fn response_to_stream(
 ) -> impl Stream<Item = Event> {
     let body = resp.into_body();
 
-    let async_read = body
-        .into_stream()
-        .map_err(|e: hyper::error::Error| {
-            info!("Stream error: {:?}", e);
-            Error::new(ErrorKind::Other, format!("{:?}", e))
-        })
-        .into_async_read();
-    let decoded_stream = decode_stream(async_read);
+    let decoded_stream = decode_stream(body);
     let event_stream = finish_stream_on_error(decoded_stream);
 
     let stream = event_stream
