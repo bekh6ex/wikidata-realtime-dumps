@@ -3,6 +3,8 @@ refresh_rate: 5 seconds
 appenders:
   stdout:
     kind: console
+    encoder:
+      pattern: "{d(%Y-%m-%d %H:%M:%S)} {l} {M} - {m}{n}"
   warn_file:
     kind: file
     path: "log/warn.log"
