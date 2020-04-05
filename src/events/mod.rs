@@ -19,6 +19,8 @@ use crate::get_entity::GetEntityClient;
 use super::prelude::*;
 
 use isahc::prelude::*;
+use futures_backoff::Strategy;
+use isahc::Error;
 
 
 mod event_stream;
@@ -84,21 +86,37 @@ pub fn create_client() -> HttpClient {
 
 async fn open_new_sse_stream(event_id: Option<String>) -> impl Stream<Item = Event> {
 
-    let client = create_client();
+    let send_request = || {
+        let event_id = event_id.clone();
+        async move {
+            let client = create_client();
 
-    let mut req = Request::builder()
-        .method("GET")
-        .uri("https://stream.wikimedia.org/v2/stream/recentchange");
-    if event_id.is_some() {
-        req = req.header("last-event-id", event_id.clone().unwrap());
-    }
-    let req = req.body(Body::empty()).unwrap();
+            let mut req = Request::builder()
+                .method("GET")
+                .uri("https://stream.wikimedia.org/v2/stream/recentchange");
+            if event_id.is_some() {
+                req = req.header("last-event-id", event_id.clone().unwrap());
+            }
+            let req = req.body(Body::empty()).unwrap();
 
-    trace!("Sending request: {:?}", req);
+            trace!("Sending request: {:?}", req);
 
-    let resp = client.send_async(req).await.unwrap();
+            client.send_async(req).await.map_err(|e| {
+                info!("Error during SSE stream opening: `{}`", e);
+                e
+            })
+        }
+    };
 
-    response_to_stream(resp, event_id)
+    let response = Strategy::exponential(Duration::from_millis(5))
+        .with_jitter(true)
+        .with_max_delay(Duration::from_secs(30))
+        .with_max_retries(50)
+        .retry(send_request)
+        .await
+        .expect(&format!("Failed to open SSE stream"));
+
+    response_to_stream(response, event_id)
 }
 
 pub async fn update_command_stream(
