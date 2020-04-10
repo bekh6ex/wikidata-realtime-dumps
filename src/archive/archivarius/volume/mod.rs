@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, Instant};
 
 use actix::{Actor, Addr, AsyncContext, Context, Handler, Message, MessageResult, SpawnHandle};
 use bytes::Bytes;
@@ -86,10 +86,13 @@ impl VolumeKeeper {
     }
 
     fn apply_changes(&mut self, commands: Vec<UpdateChunkCommand>) -> usize {
+        let start = Instant::now();
         info!("VolumeKeeper({:?}:{}) applies {} commands",
               self.range_start.ty(),
               self.i,
               commands.len());
+
+        let mut entities_cnt = 0;
 
         let size = self.storage()
             .change(move |entities: &mut BTreeMap<EntityId, SerializedEntity>| {
@@ -125,8 +128,22 @@ impl VolumeKeeper {
                         }
                     }
                 }
+                entities_cnt = entities.len();
             });
         self.volume_size = Some(size);
+
+        let took = Instant::now() - start;
+        let warn_duration = Duration::from_secs(1);
+        if took > warn_duration {
+            warn!("VolumeKeeper({:?}:{}) Applying changes took more than {:?}. Time took={:?}, size={}MB, number of entities={}",
+                  self.range_start.ty(),
+                  self.i,
+                  warn_duration,
+                  took,
+                  (size/1024/1024),
+                  entities_cnt
+            )
+        }
 
         size
     }
