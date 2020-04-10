@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-#![type_length_limit = "1383138"]
+#![type_length_limit = "1573754"]
 #![warn(unused_extern_crates)]
 
 use std::collections::BTreeMap;
