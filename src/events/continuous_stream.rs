@@ -28,6 +28,9 @@ pub struct ContinuousStream<St: Stream + 'static, Cr> {
     retry_interval_ms: u64,
 }
 
+// TODO: Figure this out. This Unpin might be unsafe.
+impl<St: Stream + 'static, Cr> Unpin for ContinuousStream<St, Cr> {}
+
 impl<S, Cr> ContinuousStream<S, Cr>
 where
     S: Stream<Item = Event>,

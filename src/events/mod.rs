@@ -160,7 +160,7 @@ pub async fn update_command_stream(
 }
 
 async fn id_stream(from: Option<EventId>) -> impl Stream<Item = EventId> {
-    open_new_sse_stream(from.map(|id| id.to_json_string()))
+    open_new_sse_stream_with_retries(from.map(|id| id.to_json_string()))
         .await
         .filter_map(|e: Event| {
             let option: Option<EventId> = match e {
@@ -178,13 +178,10 @@ async fn get_top_event_id(from: Option<EventId>) -> EventId {
     id.unwrap()
 }
 
-async fn get_wikidata_event_stream(
-    event_id: Option<EventId>,
-    ty: EntityType,
-) -> impl Stream<Item = ProperEvent> {
+async fn open_new_sse_stream_with_retries(event_id: Option<String>) -> impl Stream<Item = Event> {
     let stream = continuous_stream::ContinuousStream::new(
         move |id| {
-            let id = id.or_else(|| event_id.clone().map(|i| i.to_json_string()));
+            let id = id.or_else(|| event_id.clone());
 
             // Rewind EventId couple seconds back. Event stream has a bit random order of events,
             // so to get all of them we should go back a little.
@@ -197,6 +194,15 @@ async fn get_wikidata_event_stream(
         },
         10_000,
     );
+
+    stream
+}
+
+async fn get_wikidata_event_stream(
+    event_id: Option<EventId>,
+    ty: EntityType,
+) -> impl Stream<Item = ProperEvent> {
+    let stream = open_new_sse_stream_with_retries(event_id.map(|i| i.to_json_string())).await;
 
     let stream = stream.chunks(2).map(|ch: Vec<Event>| {
         let s = ch.as_slice();
