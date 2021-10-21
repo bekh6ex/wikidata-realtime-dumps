@@ -4,8 +4,8 @@ use std::net::{SocketAddrV4, Ipv4Addr};
 use std::sync::Arc;
 
 use actix::Addr;
-use hyper::body::Bytes;
-use hyper::{Body, StatusCode};
+use warp::hyper::body::Bytes;
+use warp::hyper::{Body, StatusCode};
 use warp::reply::Response;
 use warp::*;
 
@@ -74,9 +74,9 @@ async fn get_dump_handler(
                 .send(GetDump)
                 .await
                 .expect("Actor communication problem")
-                .map(|b| Ok(b) as Result<Bytes, Infallible>);
+                .map(|b| Ok(b.to_vec()) as Result<_, Infallible>);
 
-            return Ok(Response::new(Body::wrap_stream(result)));
+            return Ok(Response::new(warp::hyper::Body::wrap_stream(result)));
         }
     }
 
@@ -84,7 +84,7 @@ async fn get_dump_handler(
 }
 
 fn not_found() -> Response {
-    let mut r404 = Response::new(Body::from("Not found"));
+    let mut r404 = Response::new(warp::hyper::Body::from("Not found"));
     *r404.status_mut() = StatusCode::NOT_FOUND;
 
     r404

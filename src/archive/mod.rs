@@ -112,7 +112,7 @@ pub(super) fn start(types: Vec<EntityType>) -> ArchivariusMap {
         let arbiter = Arbiter::new();
         let ty = *ty;
         let arbiter_pool = arbiter_pool.clone();
-        let act = Archivarius::start_in_arbiter(&arbiter, move |ctx| {
+        let act = Archivarius::start_in_arbiter(&arbiter.handle(), move |ctx| {
             Archivarius::new(
                 "wd-rt-dumps",
                 ty,

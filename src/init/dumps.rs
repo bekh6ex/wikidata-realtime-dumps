@@ -105,6 +105,10 @@ async fn json_stream(dump_config: DumpConfig) -> impl Stream<Item = String> {
 
     let stream = download_dump_with_restarts(client, dump_config.url.clone());
 
+    let stream = stream.map(|r| {
+        r.map(|b: hyper::body::Bytes| { bytes::Bytes::from(b.to_vec())})
+    });
+
     let stream: Pin<Box<dyn Stream<Item = std::io::Result<bytes::Bytes>>>> =
         match dump_config.archive_format {
             ArchiveFormat::Bzip2 => Box::pin(BzDecoder::new(stream)),

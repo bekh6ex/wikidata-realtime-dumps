@@ -64,7 +64,7 @@ impl Archivarius {
                 let range = er.clone();
                 let self_address = self_address.clone();
                 let volume_keeper_config = volume_keeper_config.clone();
-                let vol = VolumeKeeper::start_in_arbiter(arbiters.next().as_ref(), move |_| {
+                let vol = VolumeKeeper::start_in_arbiter(&arbiters.next().as_ref().handle(), move |_| {
                     volume::VolumeKeeper::persistent(volume_root_path, volume_keeper_config, self_address, ty, id as i32, *range.inner.start(), Some(*range.inner.end()))
                 });
 
@@ -76,7 +76,7 @@ impl Archivarius {
         let initialized = state.initialized;
         let start_id_for_new_volume = last_id_to_open_actor.unwrap_or(ty.id(1));
 
-        let open_actor = VolumeKeeper::start_in_arbiter(arbiters.next().as_ref(), {
+        let open_actor = VolumeKeeper::start_in_arbiter(&arbiters.next().as_ref().handle(), {
             let volume_keeper_config = volume_keeper_config.clone();
             move |_| {
                 if initialized {
@@ -173,7 +173,7 @@ impl Archivarius {
         let range_start_for_new_volume = new_range.inner.end().next();
 
         let new_open_actor =
-            VolumeKeeper::start_in_arbiter(self.arbiters.next().as_ref(), {
+            VolumeKeeper::start_in_arbiter(&self.arbiters.next().as_ref().handle(), {
                 let volume_keeper_config = self.volume_keeper_config.clone();
                 move |_| {
                     if initializing {

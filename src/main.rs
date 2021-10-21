@@ -1,4 +1,3 @@
-#![forbid(unsafe_code)]
 #![type_length_limit = "1573754"]
 #![warn(unused_extern_crates)]
 
@@ -28,6 +27,7 @@ mod init;
 mod prelude;
 mod stream_ext;
 mod warp_server;
+use core::future::Future;
 
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {
@@ -35,12 +35,12 @@ async fn main() -> std::io::Result<()> {
 
     info!("Starting...");
 
-//    let dump_config: BTreeMap<EntityType, DumpConfig> = get_dump_config();
-    let dump_config: BTreeMap<EntityType, DumpConfig> = BTreeMap::new();
+   let dump_config: BTreeMap<EntityType, DumpConfig> = get_dump_config();
+    // let dump_config: BTreeMap<EntityType, DumpConfig> = BTreeMap::new();
 
     // TODO: Lock storage file
 
-    let types = vec![EntityType::Lexeme, EntityType::Property, EntityType::Item];
+    let types = vec![/*EntityType::Lexeme, EntityType::Property,*/ EntityType::Item];
 
     let map: ArchivariusMap = start(types);
 
@@ -57,11 +57,11 @@ async fn main() -> std::io::Result<()> {
 }
 
 fn get_dump_config() -> BTreeMap<EntityType, DumpConfig> {
-    let dump_event_id = "[{\"topic\":\"eqiad.mediawiki.recentchange\",\"partition\":0,\"timestamp\":1579993200000},{\"topic\":\"codfw.mediawiki.recentchange\",\"partition\":0,\"offset\":-1}]";
+    let dump_event_id = "[{\"topic\":\"eqiad.mediawiki.recentchange\",\"partition\":0,\"timestamp\":1634421600000},{\"topic\":\"codfw.mediawiki.recentchange\",\"partition\":0,\"offset\":-1}]";
     let dump_event_id = EventId::new(dump_event_id.to_owned());
     let mut map = BTreeMap::new();
     let item_dump_config = DumpConfig {
-        url: "https://dumps.wikimedia.org/other/wikibase/wikidatawiki/20200127/wikidata-20200127-all.json.bz2".to_owned(),
+        url: "http://dumps.wikimedia.org/other/wikibase/wikidatawiki/20211018/wikidata-20211018-all.json.bz2".to_owned(),
         event_stream_start: dump_event_id,
         ty: EntityType::Item,
         archive_format: ArchiveFormat::Bzip2,

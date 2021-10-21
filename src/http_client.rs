@@ -15,10 +15,10 @@ pub type HClient = HyperClient<HttpsConnector<HttpConnector<GaiResolver>>, Body>
 
 pub fn create_hyper_client() -> HClient {
     HyperClient::builder()
-        .http2_keep_alive_interval(None)
-        .http2_only(true)
+        // .http2_keep_alive_interval(None)
+        // .http2_only(true)
         .pool_max_idle_per_host(1)
-        .build::<_, hyper::Body>(hyper_rustls::HttpsConnector::new())
+        .build::<_, hyper::Body>(hyper_rustls::HttpsConnector::with_native_roots())
 }
 
 pub fn create_client() -> HttpClient {
@@ -95,7 +95,7 @@ pub fn get_json<'a, T: Deserialize<'a>>(
         let mut de = serde_json::Deserializer::from_reader(body.reader());
         let result: T = T::deserialize(&mut de).map_err(move |e| Error::ResponseFormat {
             cause: e,
-            body: std::str::from_utf8(body_for_error.bytes())
+            body: std::str::from_utf8(body_for_error.as_ref())
                 .unwrap()
                 .to_owned(),
         })?;

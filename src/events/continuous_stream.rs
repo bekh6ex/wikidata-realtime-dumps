@@ -3,7 +3,7 @@ use std::pin::Pin;
 use std::time::Duration;
 
 use actix::prelude::Stream;
-use actix_rt::time::{delay_for, Delay};
+use actix_rt::time::{sleep, Sleep};
 use futures::future::{ready, Ready};
 use futures::stream::once;
 use futures::StreamExt;
@@ -13,9 +13,9 @@ use log::*;
 use pin_utils::{unsafe_pinned, unsafe_unpinned};
 use sse_codec::Event;
 
-type Sleep<X> = Map<Once<Delay>, fn(()) -> Option<X>>;
+type SleepHere<X> = Map<Once<Sleep>, fn(()) -> Option<X>>;
 type Real<X> = Map<Once<Ready<X>>, fn(X) -> Option<X>>;
-type Chained<X> = Chain<Sleep<X>, Real<X>>;
+type Chained<X> = Chain<SleepHere<X>, Real<X>>;
 type StreamOfStream<X> = FilterMap<Chained<X>, Ready<Option<X>>, fn(Option<X>) -> Ready<Option<X>>>;
 type WrapStreamResult<X> = Flatten<StreamOfStream<X>>;
 
@@ -57,7 +57,7 @@ where
     }
 
     fn wrap_stream<St1: Stream + 'static>(stream: St1, retry: Duration) -> WrapStreamResult<St1> {
-        let sleep: Sleep<St1> = once(delay_for(retry)).map(none as fn(()) -> Option<St1>);
+        let sleep: SleepHere<St1> = once(sleep(retry)).map(none as fn(()) -> Option<St1>);
 
         let real = once(ready::<St1>(stream)).map(some as fn(St1) -> Option<St1>);
 
