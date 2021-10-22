@@ -27,6 +27,8 @@ mod init;
 mod prelude;
 mod stream_ext;
 mod warp_server;
+mod bzip2_par;
+
 use core::future::Future;
 
 #[actix_rt::main]
