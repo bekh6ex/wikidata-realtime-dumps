@@ -58,12 +58,14 @@ async fn main() -> std::io::Result<()> {
     Ok(())
 }
 
+//Q12598$770DD5C6-DDE5-49D0-9197-71A43CB2CA59
+
 fn get_dump_config() -> BTreeMap<EntityType, DumpConfig> {
     let dump_event_id = "[{\"topic\":\"eqiad.mediawiki.recentchange\",\"partition\":0,\"timestamp\":1634421600000},{\"topic\":\"codfw.mediawiki.recentchange\",\"partition\":0,\"offset\":-1}]";
     let dump_event_id = EventId::new(dump_event_id.to_owned());
     let mut map = BTreeMap::new();
     let item_dump_config = DumpConfig {
-        url: "https://dumps.wikimedia.org/other/wikibase/wikidatawiki/20211018/wikidata-20211018-all.json.bz2".to_owned(),
+        url: "https://dumps.wikimedia.org/other/wikibase/wikidatawiki/20230626/wikidata-20230626-all.json.bz2".to_owned(),
         event_stream_start: dump_event_id,
         ty: EntityType::Item,
         archive_format: ArchiveFormat::Bzip2,
@@ -75,7 +77,7 @@ fn get_dump_config() -> BTreeMap<EntityType, DumpConfig> {
 
 async fn get_streams(
     client: GetEntityClient,
-    map: Arc<BTreeMap<EntityType, Addr<Archivarius>>>,
+    map: ArchivariusMap,
     dump_config_map: BTreeMap<EntityType, DumpConfig>,
 ) -> Pin<Box<dyn Future<Output = ()>>> {
     fn to_vec(

@@ -6,6 +6,7 @@ use std::fmt::{Debug, Formatter, Error};
 use std::collections::BTreeMap;
 use std::io;
 use std::path::Path;
+use zstd;
 
 pub trait VolumeStorage {
     fn load(&self) -> GzippedData;
@@ -155,7 +156,7 @@ impl GzChunkStorage {
 
     fn tmp_file_path(&self) -> impl AsRef<Path> {
         let x: &Path = self.path.as_ref();
-        let x1: &'static str = "tmp.gz";
+        let x1: &'static str = "tmp.zst";
         x.with_extension(x1)
     }
 
@@ -228,16 +229,19 @@ pub struct GzippedData {
     inner: Vec<u8>,
 }
 
-impl GzippedData {
+impl CompressedData for GzippedData {
     fn compress(data: &str) -> GzippedData {
         use flate2::write::GzEncoder;
         use flate2::Compression;
         use std::io::Write;
-        let mut encoder = GzEncoder::new(Vec::with_capacity(data.len() / 5), Compression::new(3));
-        encoder.write_all(data.as_bytes()).unwrap();
+        // let mut encoder = GzEncoder::new(Vec::with_capacity(data.len() / 5), Compression::new(3));
+        // encoder.write_all(data.as_bytes()).unwrap();
+
+        let mut e = zstd::Encoder::new(Vec::with_capacity(data.len() / 6), 0).unwrap();
+        e.write_all(data.as_bytes()).unwrap();
 
         GzippedData {
-            inner: encoder.finish().unwrap(),
+            inner: e.finish().unwrap(),
         }
     }
 
@@ -245,15 +249,34 @@ impl GzippedData {
         use flate2::read::GzDecoder;
         use std::io::Read;
 
-        let mut d = GzDecoder::new(&self.inner[..]);
+
+        let mut d = zstd::Decoder::new(&self.inner[..]).unwrap();
         let mut s = String::with_capacity(self.inner.len() * 5);
         d.read_to_string(&mut s).expect("Incorrect GZip format");
         s
     }
+    fn from_binary(data: Vec<u8>) -> GzippedData {
+        GzippedData { inner: data }
+    }
+
+    fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    fn into_bytes(self) -> Bytes {
+        Bytes::from(self.inner)
+    }
+}
+
+pub trait CompressedData {
+    fn compress(data: &str) -> Self;
+
+    fn decompress(&self) -> String;
 
     fn change<F>(&self, ty: EntityType, f: F) -> (Self, usize)
-    where
-        F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>) -> (),
+        where
+            F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>) -> (),
+            Self: Sized
     {
         use measure_time::*;
         // 1152ms for the function with raw data len=22202461 and 1291 entities
@@ -301,17 +324,11 @@ impl GzippedData {
         (Self::compress(&entities), raw_size)
     }
 
-    fn from_binary(data: Vec<u8>) -> GzippedData {
-        GzippedData { inner: data }
-    }
+    fn from_binary(data: Vec<u8>) -> Self;
 
-    pub fn len(&self) -> usize {
-        self.inner.len()
-    }
+     fn len(&self) -> usize;
 
-    pub fn into_bytes(self) -> Bytes {
-        Bytes::from(self.inner)
-    }
+     fn into_bytes(self) -> Bytes;
 }
 
 impl AsRef<[u8]> for GzippedData {

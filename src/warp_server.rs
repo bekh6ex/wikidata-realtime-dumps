@@ -55,7 +55,7 @@ async fn get_dump_handler(
     use futures::StreamExt;
     // TODO: As long as we return chunks in order we can make it possible to return only certain
     //       requested ranges of entities
-    let suffix = ".jsonl.gz";
+    let suffix = ".jsonl.zst";
 
     if !ty.ends_with(suffix) {
         return Ok(not_found());

@@ -37,15 +37,16 @@ hyper-rustls = "0.22.1"
 log4rs = "0.9.0"
 warp = "0.3.1"
 rand = "0.7.3"
-async-compression = { version="0.3.8", features=["bzip2", "stream", "gzip"]}
+async-compression = { version = "0.4.0", features = ["bzip2", "gzip", "futures-io"] }
 futures_codec = "0.3.4"
 futures-timer = "3.0.2"
 num_cpus = "1.13.0"
-continuous_download = { path="continuous_download"}
-sorted_stream = { path="sorted_stream"}
-stream_throttle = { version="0.3.1" , default-features = false, features=['timer-futures-timer']}
+continuous_download = { path = "continuous_download" }
+sorted_stream = { path = "sorted_stream" }
+stream_throttle = { version = "0.3.1", default-features = false, features = ['timer-futures-timer'] }
 isahc = "0.9"
-bzip2-rs = { git="https://github.com/paolobarbolini/bzip2-rs.git", branch="main", features=["rayon"] }
+bzip2-rs = { git = "https://github.com/paolobarbolini/bzip2-rs.git", branch = "main", features = ["rayon", "rustc_1_63"] }
+zstd = "0.12.3+zstd.1.5.2"
 
 
 [dev-dependencies]

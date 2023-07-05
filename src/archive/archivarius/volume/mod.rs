@@ -39,7 +39,7 @@ impl VolumeKeeper {
             config,
             storage: Some(Volume::new_open(
                 ty,
-                format!("{}/{}.gz", root_path, i),
+                format!("{}/{}.zst", root_path, i),
             )),
             command_buffer: vec![],
             write_down_reminder: None,
@@ -61,7 +61,7 @@ impl VolumeKeeper {
             config,
             storage: Some(Volume::new_closed(
                 ty,
-                format!("{}/{}.gz", root_path, i),
+                format!("{}/{}.zst", root_path, i),
             )),
             command_buffer: vec![],
             write_down_reminder: None,
@@ -182,7 +182,7 @@ pub struct VolumeKeeperConfig {
 impl Default for VolumeKeeperConfig {
     fn default() -> Self {
         VolumeKeeperConfig {
-            max_volume_size: 44 * 1024 * 1024,
+            max_volume_size: 250 * 1024 * 1024,
             write_down_delay: Duration::from_secs(2),
         }
     }
@@ -233,6 +233,7 @@ impl Handler<GetChunk> for VolumeKeeper {
 
     fn handle(&mut self, _msg: GetChunk, _ctx: &mut Self::Context) -> Self::Result {
         debug!("Get chunk: i={}", self.i);
+        use storage::CompressedData;
         let res = self.load().into_bytes();
         MessageResult(res)
     }

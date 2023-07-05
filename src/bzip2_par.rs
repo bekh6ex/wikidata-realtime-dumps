@@ -46,64 +46,35 @@ impl<B, S> Stream for Bzip2Par<Fuse<S>>
     type Item = std::io::Result<bytes::Bytes>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        // {
-        //     let upstream_data: Poll<Option<_>> = self
-        //         .as_mut()
-        //         .inner().poll_next(cx);
-        //
-        //     match ready!(upstream_data) {
-        //         Some(Ok(data)) => {
-        //             if (data.as_ref().len() != 0)  {
-        //                 // To avoid decoder thinking it is the end of the file
-        //                 let result = self.decoder.write(data.as_ref());
-        //                 match result {
-        //                     Ok(_) => {
-        //                         //do nothing
-        //                     }
-        //                     Err(e) => {
-        //                         return Poll::Ready(Some(Err(e.into())))
-        //                     }
-        //                 }
-        //             }
-        //         }
-        //         None => {
-        //             // This is the end of the file
-        //             self.decoder.write(&[]);
-        //         }
-        //         Some(Err(e)) => {
-        //             return Poll::Ready(Some(Err(e.into())))
-        //         }
-        //     }
-        // }
+        loop {
+            let mut buf = [0; 1024];
 
-        let mut buf = [0; 8192*10];
+            match self.as_mut().decoder.read(&mut buf) {
+                Ok(ReadState::NeedsWrite) => {
+                    // `ParallelDecoder` needs more data to be written to it before it
+                    // can decode the next block.
+                    // If we reached the end of the file `compressed_file.len()` will be 0,
+                    // signaling to the `Decoder` that the last block is smaller and it can
+                    // proceed with reading.
+                    // self.decoder.write(&compressed_file);
+                    // compressed_file = &[];
 
-        match self.as_mut().decoder.read(&mut buf) {
-            Ok(ReadState::NeedsWrite) => {
-                // `ParallelDecoder` needs more data to be written to it before it
-                // can decode the next block.
-                // If we reached the end of the file `compressed_file.len()` will be 0,
-                // signaling to the `Decoder` that the last block is smaller and it can
-                // proceed with reading.
-                // self.decoder.write(&compressed_file);
-                // compressed_file = &[];
-
-                loop {
+                {
                     let upstream_data: Poll<Option<_>> = self
                         .as_mut()
                         .inner().poll_next(cx);
 
                     match ready!(upstream_data) {
                         Some(Ok(data)) => {
-                            if (data.as_ref().len() != 0)  {
+                            if (data.as_ref().len() != 0) {
                                 // To avoid decoder thinking it is the end of the file
                                 let result = self.decoder.write(data.as_ref());
                                 match result {
-                                    Ok(_) => {
-                                        continue
+                                    Ok(()) => {
+                                        continue;
                                     }
                                     Err(e) => {
-                                        return Poll::Ready(Some(Err(e.into())))
+                                        return Poll::Ready(Some(Err(e.into())));
                                     }
                                 }
                             }
@@ -114,7 +85,7 @@ impl<B, S> Stream for Bzip2Par<Fuse<S>>
                             self.decoder.write(&[]);
                         }
                         Some(Err(e)) => {
-                            return Poll::Ready(Some(Err(e.into())))
+                            return Poll::Ready(Some(Err(e.into())));
                         }
                     }
                 }
@@ -133,8 +104,7 @@ impl<B, S> Stream for Bzip2Par<Fuse<S>>
             Err(e) => {
                 return Poll::Ready(Some(Err(e.into())));
             }
+            }
         }
-
-        }
-
+    }
 }

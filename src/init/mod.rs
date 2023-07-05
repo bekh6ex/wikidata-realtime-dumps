@@ -66,9 +66,13 @@ pub async fn init_inner(
 
     let maybe_dump_pair = {
         match dump_config {
-            None => None,
+            None => {
+                info!("No dump config for {:?}", ty);
+                None
+            },
             Some(dump_config) => {
                 assert_eq!(ty, dump_config.ty);
+                info!("Got dump config for {:?}: {:?}", ty, dump_config);
                 let id_stream = id_stream(min, max, ty);
                 let dump_stream = get_dump_stream(dump_config.clone())
                     .await
