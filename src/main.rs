@@ -63,7 +63,7 @@ fn get_dump_config() -> BTreeMap<EntityType, DumpConfig> {
     let dump_event_id = EventId::new(dump_event_id.to_owned());
     let mut map = BTreeMap::new();
     let item_dump_config = DumpConfig {
-        url: "http://dumps.wikimedia.org/other/wikibase/wikidatawiki/20211018/wikidata-20211018-all.json.bz2".to_owned(),
+        url: "https://dumps.wikimedia.org/other/wikibase/wikidatawiki/20211018/wikidata-20211018-all.json.bz2".to_owned(),
         event_stream_start: dump_event_id,
         ty: EntityType::Item,
         archive_format: ArchiveFormat::Bzip2,

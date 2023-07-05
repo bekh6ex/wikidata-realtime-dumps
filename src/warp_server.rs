@@ -25,7 +25,7 @@ pub(super) async fn start(ar: &Arc<BTreeMap<EntityType, Addr<Archivarius>>>) {
 
 fn get_dump_route(
     ar: &Arc<BTreeMap<EntityType, Addr<Archivarius>>>,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+) -> impl Filter<Extract=impl warp::Reply, Error=warp::Rejection> + Clone {
     warp::path!("dumps" / String)
         .and(warp::get())
         .and(with_actor(ar))
@@ -35,8 +35,8 @@ fn get_dump_route(
 fn with_actor(
     ar: &Arc<BTreeMap<EntityType, Addr<Archivarius>>>,
 ) -> impl Filter<
-    Extract = (Arc<BTreeMap<EntityType, Addr<Archivarius>>>,),
-    Error = std::convert::Infallible,
+    Extract=(Arc<BTreeMap<EntityType, Addr<Archivarius>>>, ),
+    Error=std::convert::Infallible,
 > + Clone {
     let ar = ar.clone();
     warp::any().map(move || ar.clone())
@@ -61,7 +61,10 @@ async fn get_dump_handler(
         return Ok(not_found());
     }
 
-    ty.split_off(ty.len() - suffix.len());
+    #[allow(unused_must_use)]
+        {
+            ty.split_off(ty.len() - suffix.len());
+        }
 
     let ty: Option<&EntityType> = ENTITY_NAMES
         .iter()

@@ -79,7 +79,7 @@ impl<B, S> Stream for Bzip2Par<Fuse<S>>
         let mut buf = [0; 8192*10];
 
         match self.as_mut().decoder.read(&mut buf) {
-            Ok(ReadState::NeedsWrite(space)) => {
+            Ok(ReadState::NeedsWrite) => {
                 // `ParallelDecoder` needs more data to be written to it before it
                 // can decode the next block.
                 // If we reached the end of the file `compressed_file.len()` will be 0,
@@ -108,6 +108,7 @@ impl<B, S> Stream for Bzip2Par<Fuse<S>>
                                 }
                             }
                         }
+                        #[allow(unused_must_use)] // The only error is that we reached EOF - ignore
                         None => {
                             // This is the end of the file
                             self.decoder.write(&[]);

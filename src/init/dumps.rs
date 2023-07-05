@@ -17,6 +17,7 @@ use sorted_stream::BufferedSortedStream;
 use crate::http_client::{create_client, create_hyper_client};
 use crate::init::{ArchiveFormat, DumpConfig, DumpFormat};
 use crate::prelude::*;
+use crate::bzip2_par::Bzip2Par;
 use std::pin::Pin;
 
 pub(super) async fn get_dump_stream(
@@ -109,11 +110,14 @@ async fn json_stream(dump_config: DumpConfig) -> impl Stream<Item = String> {
         r.map(|b: hyper::body::Bytes| { bytes::Bytes::from(b.to_vec())})
     });
 
-    let stream: Pin<Box<dyn Stream<Item = std::io::Result<bytes::Bytes>>>> =
-        match dump_config.archive_format {
-            ArchiveFormat::Bzip2 => Box::pin(BzDecoder::new(stream)),
-            ArchiveFormat::Gzip => Box::pin(GzipDecoder::new(stream)),
-        };
+
+    let stream = Bzip2Par::new(stream);
+
+    // let stream: Pin<Box<dyn Stream<Item = std::io::Result<bytes::Bytes>>>> =
+    //     match dump_config.archive_format {
+    //         ArchiveFormat::Bzip2 => Box::pin(BzDecoder::new(stream)),
+    //         ArchiveFormat::Gzip => Box::pin(GzipDecoder::new(stream)),
+    //     };
 
     let inner = stream.into_async_read();
     let stream = FramedRead::new(inner, LinesCodec {});

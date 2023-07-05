@@ -16,6 +16,7 @@ panic = 'abort'
 
 
 [dependencies]
+cargo-edit = "0.8.0"
 actix="0.12.0"
 actix-rt = "2.3.0"
 futures = { version="0.3.17", features=["compat"] }
@@ -44,6 +45,8 @@ continuous_download = { path="continuous_download"}
 sorted_stream = { path="sorted_stream"}
 stream_throttle = { version="0.3.1" , default-features = false, features=['timer-futures-timer']}
 isahc = "0.9"
+bzip2-rs = { git="https://github.com/paolobarbolini/bzip2-rs.git", branch="main", features=["rayon"] }
+
 
 [dev-dependencies]
 futures-test = "0.3.17"

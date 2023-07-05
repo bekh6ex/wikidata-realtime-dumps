@@ -1,8 +1,6 @@
-use serde::export::fmt::Error;
-use serde::export::Formatter;
 use serde::{Deserialize, Serialize};
 use sorted_stream::Sequential;
-use std::fmt::Display;
+use std::fmt::{Display, Error, Formatter};
 
 #[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EntityType {
