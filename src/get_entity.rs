@@ -28,7 +28,7 @@ impl GetEntityClient {
             .map(|_| Arc::new(create_client()))
             .collect();
         GetEntityClient {
-            client_pool: client_pool,
+            client_pool,
             pool_index: Arc::new(AtomicUsize::new(0)),
             rate_pool: ThrottlePool::new(rate),
         }
@@ -138,8 +138,7 @@ impl Default for GetEntityClient {
     fn default() -> Self {
         const MAX_CLIENTS: usize = 20;
         let rate = ThrottleRate::new(300, Duration::from_millis(1000));
-        let client_pool = GetEntityClient::new(NonZeroUsize::new(MAX_CLIENTS).unwrap(), rate);
-        client_pool
+        GetEntityClient::new(NonZeroUsize::new(MAX_CLIENTS).unwrap(), rate)
     }
 }
 

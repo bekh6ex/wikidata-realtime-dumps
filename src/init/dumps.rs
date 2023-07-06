@@ -56,7 +56,7 @@ fn convert_to_serialized_entity(
             })
         })
         .buffered(num_cpus::get() * 2)
-        .filter_map(|x| ready(x))
+        .filter_map(ready)
         .filter_map(move |(result, s)| {
             ready(match ty.parse_id(&result.id) {
                 Err(_) => None,

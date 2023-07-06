@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
 
@@ -89,7 +90,8 @@ impl VolumeKeeper {
               self.i,
               commands.len());
 
-        let mut entities_cnt = 0;
+        let entities_cnt = RefCell::new(0usize);
+        let entities_cnt_inner = entities_cnt.clone();
 
         let size = self.storage()
             .change(move |entities: &mut BTreeMap<EntityId, SerializedEntity>| {
@@ -125,7 +127,7 @@ impl VolumeKeeper {
                         }
                     }
                 }
-                entities_cnt = entities.len();
+                entities_cnt_inner.replace(entities.len());
             });
         self.volume_size = Some(size);
 
@@ -138,7 +140,7 @@ impl VolumeKeeper {
                   warn_duration,
                   took,
                   (size/1024/1024),
-                  entities_cnt
+                  entities_cnt.take()
             )
         }
 
@@ -156,14 +158,11 @@ impl VolumeKeeper {
     fn finish_the_volume() {}
 
     fn remind_to_write_down(&mut self, ctx: &mut Context<Self>) {
-        match self.write_down_reminder.take() {
-            Some(handle) => {
-                ctx.cancel_future(handle);
-            }
-            None => (),
+        if let Some(handle) = self.write_down_reminder.take() {
+            ctx.cancel_future(handle);
         };
 
-        let handle = ctx.notify_later(WriteDown, self.config.write_down_delay.clone());
+        let handle = ctx.notify_later(WriteDown, self.config.write_down_delay);
         self.write_down_reminder.replace(handle);
     }
 }
@@ -198,15 +197,15 @@ impl Handler<UpdateChunkCommand> for VolumeKeeper {
             msg.entity_id()
         );
 
-        self.command_buffer.push(msg.clone());
+        self.command_buffer.push(msg);
 
         let new_raw_size = if self.command_buffer.len() >= 20 {
-            let buffer = core::mem::replace(&mut self.command_buffer, vec![]);
+            let buffer = core::mem::take(&mut self.command_buffer);
             self.apply_changes(buffer)
         } else {
             match self.volume_size {
                 None => {
-                    let buffer = core::mem::replace(&mut self.command_buffer, vec![]);
+                    let buffer = core::mem::take(&mut self.command_buffer);
                     self.apply_changes(buffer)
                 },
                 Some(size) => {
@@ -279,7 +278,7 @@ impl Handler<WriteDown> for VolumeKeeper {
 
             return;
         }
-        let buffer = core::mem::replace(&mut self.command_buffer, vec![]);
+        let buffer = core::mem::take(&mut self.command_buffer);
 
         let _ids: BTreeSet<EntityId> = buffer.iter().map(|uc| uc.entity_id()).collect();
 

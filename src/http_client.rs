@@ -28,15 +28,13 @@ pub fn create_client() -> HttpClient {
     use isahc::prelude::*;
     use std::time::Duration;
 
-    let client = HttpClient::builder()
+    HttpClient::builder()
         .timeout(Duration::from_secs(20))
         .connect_timeout(Duration::from_secs(10))
         .redirect_policy(RedirectPolicy::None)
         .version_negotiation(VersionNegotiation::http2())
         .build()
-        .unwrap();
-
-    client
+        .unwrap()
 }
 
 fn generate_session_id() -> String {

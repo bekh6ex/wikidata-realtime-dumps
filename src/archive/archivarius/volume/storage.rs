@@ -67,7 +67,7 @@ impl VolumeStorage for Volume {
 
     fn change<F>(&mut self, f: F) -> usize
     where
-        F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>) -> (),
+        F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>),
         Self: Sized,
     {
         match self {
@@ -120,7 +120,7 @@ impl VolumeStorage for MemStorage {
 
     fn change<F>(&mut self, f: F) -> usize
     where
-        F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>) -> (),
+        F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>),
         Self: Sized,
     {
         f(&mut self.inner);
@@ -143,7 +143,7 @@ impl GzChunkStorage {
     pub(super) fn new_initialized(ty: EntityType, path: String, data: GzippedData) -> Self {
         let s = GzChunkStorage {
             ty,
-            path: path.into(),
+            path,
         };
         s.store(data);
         s
@@ -187,7 +187,7 @@ impl GzChunkStorage {
 
         {
             trace!("Writing a file '{:?}' len={}", self.file_path(), data.len());
-            fs::create_dir_all(&dir_path)
+            fs::create_dir_all(dir_path)
                 .unwrap_or_else(|_| panic!("Failed to create directory '{:?}'", &dir_path));
             fs::write(self.tmp_file_path(), data).unwrap_or_else(|e| {
                 panic!(
@@ -216,7 +216,7 @@ impl VolumeStorage for GzChunkStorage {
 
     fn change<F>(&mut self, f: F) -> usize
     where
-        F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>) -> (),
+        F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>),
     {
         let (data, raw_size) = self.load().change(self.ty, f);
         self.store(data);
@@ -268,7 +268,7 @@ pub trait CompressedData {
 
     fn change<F>(&self, ty: EntityType, f: F) -> (Self, usize)
         where
-            F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>) -> (),
+            F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>),
             Self: Sized
     {
         use measure_time::*;
@@ -286,7 +286,7 @@ pub trait CompressedData {
                         lastrevid: u64,
                     }
 
-                    let entity = serde_json::from_str::<Entity>(&e).expect("Failed to unserialize");
+                    let entity = serde_json::from_str::<Entity>(e).expect("Failed to unserialize");
                     let id = ty.parse_id(&entity.id).unwrap();
                     let revision = RevisionId(entity.lastrevid);
 

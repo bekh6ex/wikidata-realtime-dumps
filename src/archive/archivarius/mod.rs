@@ -530,21 +530,10 @@ struct VolumeKeeperReport {
     work: Vec<(EventId, EntityId)>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 struct StoredState {
     closed: Vec<EntityRange>,
     open_volume_last_entity_id: Option<EntityId>,
     last_processed_event_id: Option<EventId>,
     initialized: bool,
-}
-
-impl Default for StoredState {
-    fn default() -> Self {
-        StoredState {
-            closed: vec![],
-            open_volume_last_entity_id: None,
-            last_processed_event_id: None,
-            initialized: false,
-        }
-    }
 }

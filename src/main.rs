@@ -89,7 +89,7 @@ async fn get_streams(
 
     let map = to_vec(map);
     let res = stream::iter(map).for_each_concurrent(None, move |(entity_type, archive_actor)| {
-        let dump_config = dump_config_map.get(&entity_type).map(|c| c.clone());
+        let dump_config = dump_config_map.get(&entity_type).cloned();
         let client = client.clone();
         async move {
             let entity_type = entity_type;

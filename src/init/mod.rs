@@ -30,6 +30,7 @@ pub enum ArchiveFormat {
 }
 
 #[derive(Clone, Copy, Debug)]
+#[allow(dead_code)]
 pub enum DumpFormat {
     WikidataJsonArray,
     SortedJsonLines,
@@ -114,9 +115,7 @@ pub async fn init_inner(
 
     let update_stream = final_stream
         .buffered(150)
-        .filter_map(|se: Option<SerializedEntity>| {
-            ready(se.map(Initialization::UpdateEntity))
-        });
+        .filter_map(|se: Option<SerializedEntity>| ready(se.map(Initialization::UpdateEntity)));
 
     let init_start_stream = once(ready(Initialization::Start(event_id)));
 
@@ -179,8 +178,7 @@ impl QueryResponse {
             .expect("No changes present")
             .title;
 
-        let id = ty.parse_from_title(title).expect("Failed to parse ID");
-        id
+        ty.parse_from_title(title).expect("Failed to parse ID")
     }
 }
 

@@ -7,7 +7,6 @@ use actix_rt::time::{sleep, Sleep};
 use futures::future::{ready, Ready};
 use futures::stream::once;
 use futures::StreamExt;
-use futures_util;
 use futures_util::stream::*;
 use log::*;
 use pin_utils::{unsafe_pinned, unsafe_unpinned};

@@ -71,15 +71,13 @@ pub fn create_client() -> HttpClient {
     use isahc::config::{RedirectPolicy, VersionNegotiation};
     use isahc::prelude::*;
 
-    let client = HttpClient::builder()
+    HttpClient::builder()
         .timeout(Duration::from_secs(30))
         .connect_timeout(Duration::from_secs(10))
         .redirect_policy(RedirectPolicy::None)
         .version_negotiation(VersionNegotiation::http2())
         .build()
-        .unwrap();
-
-    client
+        .unwrap()
 }
 
 async fn open_new_sse_stream(event_id: Option<String>) -> impl Stream<Item = Event> {
@@ -177,7 +175,7 @@ async fn get_top_event_id(from: Option<EventId>) -> EventId {
 }
 
 async fn open_new_sse_stream_with_retries(event_id: Option<String>) -> impl Stream<Item = Event> {
-    let stream = continuous_stream::ContinuousStream::new(
+    continuous_stream::ContinuousStream::new(
         move |id| {
             let id = id.or_else(|| event_id.clone());
 
@@ -191,9 +189,7 @@ async fn open_new_sse_stream_with_retries(event_id: Option<String>) -> impl Stre
             once(open_new_sse_stream(id)).flatten()
         },
         10_000,
-    );
-
-    stream
+    )
 }
 
 async fn get_wikidata_event_stream(
@@ -207,8 +203,8 @@ async fn get_wikidata_event_stream(
 
         match ch {
             Event::Message { id, data, .. } => SortableEvent {
-                id: EventId::new(id.unwrap().clone() ),
-                data: data.clone(),
+                id: EventId::new(id.unwrap() ),
+                data,
             },
             _ => panic!(),
         }
@@ -220,7 +216,7 @@ async fn get_wikidata_event_stream(
         let result = if hint.wiki == WIKIDATA && hint.namespace == ty.namespace().n() {
             let data: EventData = serde_json::from_str(&event.data).unwrap();
             Some(ProperEvent {
-                id: event.id.clone(),
+                id: event.id,
                 data,
             })
         } else {
