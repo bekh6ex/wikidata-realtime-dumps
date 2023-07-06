@@ -1,14 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::time::{Duration, SystemTime, Instant};
+use std::time::{Duration, Instant};
 
-use actix::{Actor, Addr, AsyncContext, Context, Handler, Message, MessageResult, SpawnHandle};
+use actix::{Actor, AsyncContext, Context, Handler, Message, MessageResult, SpawnHandle};
 use bytes::Bytes;
 use log::*;
 
 use storage::GzippedData;
 use storage::VolumeStorage;
 
-use crate::archive::{Archivarius, UpdateChunkCommand};
+use crate::archive::{UpdateChunkCommand};
 use crate::prelude::{EntityId, EntityType, SerializedEntity};
 
 use self::storage::Volume;
@@ -23,18 +23,16 @@ pub struct VolumeKeeper {
     write_down_reminder: Option<SpawnHandle>,
     range_start: EntityId,
     range_end: Option<EntityId>,
-    master: Addr<Archivarius>,
     volume_size: Option<usize>,
 }
 
 impl VolumeKeeper {
-    pub(super) fn in_memory(root_path: String, config: VolumeKeeperConfig, master: Addr<Archivarius>, ty: EntityType, i: i32, from: EntityId, to: Option<EntityId>) -> VolumeKeeper {
+    pub(super) fn in_memory(root_path: String, config: VolumeKeeperConfig, ty: EntityType, i: i32, from: EntityId, to: Option<EntityId>) -> VolumeKeeper {
         let to = to.map(|to| {
             assert!(to > from);
             to
         });
         VolumeKeeper {
-            master,
             i,
             config,
             storage: Some(Volume::new_open(
@@ -49,14 +47,13 @@ impl VolumeKeeper {
         }
     }
 
-    pub(super) fn persistent(root_path: String, config: VolumeKeeperConfig, master: Addr<Archivarius>, ty: EntityType, i: i32, from: EntityId, to: Option<EntityId>) -> Self {
+    pub(super) fn persistent(root_path: String, config: VolumeKeeperConfig, ty: EntityType, i: i32, from: EntityId, to: Option<EntityId>) -> Self {
         let to = to.map(|to| {
             assert!(to > from);
             to
         });
 
         VolumeKeeper {
-            master,
             i,
             config,
             storage: Some(Volume::new_closed(

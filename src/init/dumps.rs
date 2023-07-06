@@ -1,10 +1,9 @@
-// use async_compression::stream::{BzDecoder, GzipDecoder};
-use async_compression::futures::bufread::{BzDecoder, GzipDecoder};
+use async_compression::futures::bufread::{BzDecoder};
 use async_std::prelude::*;
 use futures::future::ready;
 use futures::stream::*;
 use futures::{AsyncRead, StreamExt};
-use futures_codec::{BytesCodec, FramedRead, LinesCodec};
+use futures_codec::{FramedRead, LinesCodec};
 use hyper::body::Bytes;
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
@@ -15,10 +14,9 @@ use serde::Deserialize;
 use continuous_download::ContinuousDownloadStream;
 use sorted_stream::BufferedSortedStream;
 
-use crate::http_client::{create_client, create_hyper_client};
+use crate::http_client::{create_hyper_client};
 use crate::init::{ArchiveFormat, DumpConfig, DumpFormat};
 use crate::prelude::*;
-use crate::bzip2_par::Bzip2Par;
 use std::pin::Pin;
 use log::*;
 
@@ -126,7 +124,7 @@ pub async fn json_stream(dump_config: DumpConfig) -> impl Stream<Item=String> {
 
     let decoder: Pin<Box<dyn AsyncRead>> = match dump_config.archive_format {
         ArchiveFormat::Bzip2 => Box::pin(BzDecoder::new(stream.into_async_read())),
-        ArchiveFormat::Gzip => Box::pin(GzipDecoder::new(stream.into_async_read())),
+        // ArchiveFormat::Gzip => Box::pin(GzipDecoder::new(stream.into_async_read())),
     };
 
     let stream = FramedRead::new(decoder, LinesCodec {});
@@ -146,6 +144,7 @@ pub async fn json_stream(dump_config: DumpConfig) -> impl Stream<Item=String> {
             Box::pin(stream)
         }
         DumpFormat::SortedJsonLines => {
+            // TODO: Double check. Never tried
             let stream = stream
                 .map(|r| r.expect("Dump response stream terminated"))
                 .map(|mut s: String| {

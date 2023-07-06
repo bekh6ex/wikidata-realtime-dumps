@@ -67,7 +67,7 @@ fn item_archivarius(dir: String) -> Addr<Archivarius> {
             max_volume_size: 0, // Each entity goes into separate volume
             write_down_delay: Duration::from_millis(1),
         };
-        Archivarius::new(&dir, EntityType::Item, config, pool(), ctx.address())
+        Archivarius::new(&dir, EntityType::Item, config, pool())
     })
 }
 

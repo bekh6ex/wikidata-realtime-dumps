@@ -1,15 +1,11 @@
-use std::io::{Error, ErrorKind};
-
 use futures::future::ready;
 
-use futures::{Stream, StreamExt, TryStreamExt};
+use futures::{Stream, StreamExt};
 use log::*;
 
 use sse_codec::{decode_stream, Event};
 
-use isahc::prelude::*;
-use isahc::{Response, Body};
-use isahc::AsyncBody;
+use isahc::{Response, AsyncBody};
 
 use std::fmt::Debug;
 

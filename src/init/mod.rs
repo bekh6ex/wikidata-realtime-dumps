@@ -26,7 +26,7 @@ pub struct DumpConfig {
 #[derive(Clone, Copy, Debug)]
 pub enum ArchiveFormat {
     Bzip2,
-    Gzip,
+    // Gzip,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -115,7 +115,7 @@ pub async fn init_inner(
     let update_stream = final_stream
         .buffered(150)
         .filter_map(|se: Option<SerializedEntity>| {
-            ready(se.map(move |se| Initialization::UpdateEntity(se)))
+            ready(se.map(Initialization::UpdateEntity))
         });
 
     let init_start_stream = once(ready(Initialization::Start(event_id)));

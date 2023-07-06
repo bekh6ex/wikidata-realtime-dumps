@@ -6,13 +6,12 @@ use std::fmt::{Debug, Formatter, Error};
 use std::collections::BTreeMap;
 use std::io;
 use std::path::Path;
-use zstd;
 
 pub trait VolumeStorage {
     fn load(&self) -> GzippedData;
     fn change<F>(&mut self, f: F) -> usize
     where
-        F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>) -> (),
+        F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>),
         Self: Sized;
 }
 
@@ -231,11 +230,7 @@ pub struct GzippedData {
 
 impl CompressedData for GzippedData {
     fn compress(data: &str) -> GzippedData {
-        use flate2::write::GzEncoder;
-        use flate2::Compression;
         use std::io::Write;
-        // let mut encoder = GzEncoder::new(Vec::with_capacity(data.len() / 5), Compression::new(3));
-        // encoder.write_all(data.as_bytes()).unwrap();
 
         let mut e = zstd::Encoder::new(Vec::with_capacity(data.len() / 6), 0).unwrap();
         e.write_all(data.as_bytes()).unwrap();
@@ -246,9 +241,7 @@ impl CompressedData for GzippedData {
     }
 
     fn decompress(&self) -> String {
-        use flate2::read::GzDecoder;
         use std::io::Read;
-
 
         let mut d = zstd::Decoder::new(&self.inner[..]).unwrap();
         let mut s = String::with_capacity(self.inner.len() * 5);

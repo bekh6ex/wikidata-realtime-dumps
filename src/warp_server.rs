@@ -4,8 +4,7 @@ use std::net::{SocketAddrV4, Ipv4Addr};
 use std::sync::Arc;
 
 use actix::Addr;
-use warp::hyper::body::Bytes;
-use warp::hyper::{Body, StatusCode};
+use warp::hyper::{StatusCode};
 use warp::reply::Response;
 use warp::*;
 

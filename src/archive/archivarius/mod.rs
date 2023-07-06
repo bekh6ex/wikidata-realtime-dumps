@@ -38,12 +38,12 @@ pub(crate) struct Archivarius {
 }
 
 impl Archivarius {
-    pub fn new(root_path: &str, ty: EntityType, volume_keeper_config: VolumeKeeperConfig, arbiters: ArbiterPool, self_address: Addr<Archivarius>) -> Archivarius {
+    pub fn new(root_path: &str, ty: EntityType, volume_keeper_config: VolumeKeeperConfig, arbiters: ArbiterPool) -> Archivarius {
         let store = ArchivariusStore::new(root_path, ty);
 
         let state = store.load().unwrap_or_default();
 
-        Self::new_initialized(ty, volume_keeper_config, store, state, arbiters, self_address)
+        Self::new_initialized(ty, volume_keeper_config, store, state, arbiters)
     }
 
     fn new_initialized(
@@ -52,7 +52,6 @@ impl Archivarius {
         store: ArchivariusStore,
         state: StoredState,
         arbiters: ArbiterPool,
-        self_address: Addr<Archivarius>,
     ) -> Archivarius {
         let volume_root_path = store.volume_root_path();
         let closed_actors = state
@@ -62,10 +61,9 @@ impl Archivarius {
             .map(|(id, er)| {
                 let volume_root_path = volume_root_path.clone();
                 let range = er.clone();
-                let self_address = self_address.clone();
                 let volume_keeper_config = volume_keeper_config.clone();
                 let vol = VolumeKeeper::start_in_arbiter(&arbiters.next().as_ref().handle(), move |_| {
-                    volume::VolumeKeeper::persistent(volume_root_path, volume_keeper_config, self_address, ty, id as i32, *range.inner.start(), Some(*range.inner.end()))
+                    volume::VolumeKeeper::persistent(volume_root_path, volume_keeper_config, ty, id as i32, *range.inner.start(), Some(*range.inner.end()))
                 });
 
                 (er.clone(), vol)
@@ -80,9 +78,9 @@ impl Archivarius {
             let volume_keeper_config = volume_keeper_config.clone();
             move |_| {
                 if initialized {
-                    VolumeKeeper::persistent(volume_root_path.clone(), volume_keeper_config, self_address, ty, new_id as i32, start_id_for_new_volume, None)
+                    VolumeKeeper::persistent(volume_root_path.clone(), volume_keeper_config, ty, new_id as i32, start_id_for_new_volume, None)
                 } else {
-                    VolumeKeeper::in_memory(volume_root_path.clone(), volume_keeper_config, self_address, ty, new_id as i32, start_id_for_new_volume, None)
+                    VolumeKeeper::in_memory(volume_root_path.clone(), volume_keeper_config, ty, new_id as i32, start_id_for_new_volume, None)
                 }
             }
         });
@@ -152,7 +150,7 @@ impl Archivarius {
         }
     }
 
-    fn close_current_open_actor(&mut self, self_addr: Addr<Self>) {
+    fn close_current_open_actor(&mut self) {
         let volume_root_path = self.store.volume_root_path();
 
         let new_id = self.finished_volumes.len() + 1;
@@ -177,9 +175,9 @@ impl Archivarius {
                 let volume_keeper_config = self.volume_keeper_config.clone();
                 move |_| {
                     if initializing {
-                        VolumeKeeper::in_memory(volume_root_path.clone(), volume_keeper_config,self_addr,ty, new_id as i32, range_start_for_new_volume, None)
+                        VolumeKeeper::in_memory(volume_root_path.clone(), volume_keeper_config, ty, new_id as i32, range_start_for_new_volume, None)
                     } else {
-                        VolumeKeeper::persistent(volume_root_path.clone(),volume_keeper_config,self_addr, ty, new_id as i32,range_start_for_new_volume, None)
+                        VolumeKeeper::persistent(volume_root_path.clone(), volume_keeper_config, ty, new_id as i32, range_start_for_new_volume, None)
                     }
                 }
             });
@@ -343,12 +341,12 @@ impl Message for CloseOpenActor {
 impl Handler<CloseOpenActor> for Archivarius {
     type Result = MessageResult<CloseOpenActor>;
 
-    fn handle(&mut self, msg: CloseOpenActor, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: CloseOpenActor, _ctx: &mut Self::Context) -> Self::Result {
         if self.open_volume != msg.addr {
             return MessageResult(());
         }
 
-        self.close_current_open_actor(ctx.address());
+        self.close_current_open_actor();
 
         MessageResult(())
     }

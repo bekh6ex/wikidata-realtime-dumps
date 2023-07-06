@@ -11,7 +11,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use stream_throttle::{ThrottlePool, ThrottleRate};
 
-use crate::http_client::{create_client, get_json, HClient, Error};
+use crate::http_client::{create_client, get_json, Error};
 use crate::prelude::*;
 use isahc::*;
 

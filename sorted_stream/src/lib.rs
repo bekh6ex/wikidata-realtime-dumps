@@ -61,7 +61,7 @@ where
                     let max_buf_size = self.max_buffer_size;
                     let buffer = self.as_mut().buffer();
                     let seq_marker = item.seq_marker().clone();
-                    let vec = buffer.entry(seq_marker.clone()).or_insert_with(|| vec![]);
+                    let vec = buffer.entry(seq_marker.clone()).or_insert_with(Vec::new);
                     vec.push(item);
                     let buffer_len: usize = buffer.values().map(|v| v.len()).sum();
                     if buffer_len > max_buf_size {

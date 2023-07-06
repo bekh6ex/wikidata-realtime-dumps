@@ -20,7 +20,6 @@ use super::prelude::*;
 
 use isahc::*;
 use futures_backoff::Strategy;
-use isahc::Error;
 
 
 mod event_stream;
@@ -71,7 +70,6 @@ pub async fn get_current_event_id() -> EventId {
 pub fn create_client() -> HttpClient {
     use isahc::config::{RedirectPolicy, VersionNegotiation};
     use isahc::prelude::*;
-    use std::time::Duration;
 
     let client = HttpClient::builder()
         .timeout(Duration::from_secs(30))
@@ -474,11 +472,6 @@ impl EventData {
 #[derive(Deserialize, Debug, PartialEq)]
 struct RevisionData {
     new: u64,
-}
-
-#[derive(Deserialize, Debug)]
-struct WikidataResponse {
-    entities: serde_json::Map<String, serde_json::Value>,
 }
 
 #[cfg(test)]

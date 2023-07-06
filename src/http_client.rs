@@ -1,5 +1,5 @@
 use futures::*;
-use hyper::{Body, Client as HyperClient, Request, Response, StatusCode};
+use hyper::{Body, Client as HyperClient, Request, StatusCode};
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper_rustls::HttpsConnector;
@@ -16,8 +16,6 @@ pub type HClient = HyperClient<HttpsConnector<HttpConnector<GaiResolver>>, Body>
 
 pub fn create_hyper_client() -> HClient {
     HyperClient::builder()
-        // .http2_keep_alive_interval(None)
-        // .http2_only(true)
         .pool_max_idle_per_host(1)
         .build::<_, hyper::Body>(hyper_rustls::HttpsConnectorBuilder::new()
             .with_native_roots()
@@ -90,7 +88,6 @@ pub fn get_json<'a, T: Deserialize<'a>>(
         //Q 120 367 626
 
         use bytes::Buf;
-        use isahc::ResponseExt;
 
         let body = response.text().await.map_err(|e| GetResponse(format!("{}", e.kind())))?;
 

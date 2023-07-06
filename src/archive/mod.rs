@@ -4,7 +4,6 @@ use crate::events::EventId;
 use actix::prelude::*;
 use actix::{Addr, Message};
 use bytes::Bytes;
-use num_cpus;
 use std::future::Future;
 use std::iter::FromIterator;
 use std::num::NonZeroUsize;
@@ -112,13 +111,12 @@ pub(super) fn start(types: Vec<EntityType>) -> ArchivariusMap {
         let arbiter = Arbiter::new();
         let ty = *ty;
         let arbiter_pool = arbiter_pool.clone();
-        let act = Archivarius::start_in_arbiter(&arbiter.handle(), move |ctx| {
+        let act = Archivarius::start_in_arbiter(&arbiter.handle(), move |_ctx| {
             Archivarius::new(
                 "wd-rt-dumps",
                 ty,
                 VolumeKeeperConfig::default(),
-                arbiter_pool.clone(),
-                ctx.address()
+                arbiter_pool
             )
         });
         (ty, act)
