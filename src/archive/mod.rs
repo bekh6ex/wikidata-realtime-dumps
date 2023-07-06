@@ -9,9 +9,9 @@ use std::iter::FromIterator;
 use std::num::NonZeroUsize;
 use std::pin::Pin;
 
+use self::archivarius::VolumeKeeperConfig;
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use self::archivarius::VolumeKeeperConfig;
 
 pub(crate) use self::archivarius::{Archivarius, Initialization, QueryState};
 
@@ -116,7 +116,7 @@ pub(super) fn start(types: Vec<EntityType>) -> ArchivariusMap {
                 "wd-rt-dumps",
                 ty,
                 VolumeKeeperConfig::default(),
-                arbiter_pool
+                arbiter_pool,
             )
         });
         (ty, act)

@@ -5,7 +5,7 @@ use log::*;
 
 use sse_codec::{decode_stream, Event};
 
-use isahc::{Response, AsyncBody};
+use isahc::{AsyncBody, Response};
 
 use std::fmt::Debug;
 
@@ -19,22 +19,18 @@ pub(super) fn response_to_stream(
     let event_stream = finish_stream_on_error(decoded_stream);
 
     let stream = event_stream
-        .take_while(|v| {
-            match v {
-                Event::Message { .. } => ready(true),
-                _ => {
-                    info!("Stopping stream. Wrong set of messages: {:?}", v);
-                    ready(false)
-                }
+        .take_while(|v| match v {
+            Event::Message { .. } => ready(true),
+            _ => {
+                info!("Stopping stream. Wrong set of messages: {:?}", v);
+                ready(false)
             }
         })
-        .filter(|v| {
-            match v {
-                Event::Message { .. } => ready(true),
-                _ => {
-                    info!("Stopping stream. Wrong set of messages: {:?}", v);
-                    ready(false)
-                }
+        .filter(|v| match v {
+            Event::Message { .. } => ready(true),
+            _ => {
+                info!("Stopping stream. Wrong set of messages: {:?}", v);
+                ready(false)
             }
         });
 

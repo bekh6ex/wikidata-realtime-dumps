@@ -2,8 +2,8 @@ use crate::prelude::*;
 use bytes::Bytes;
 use futures::io::ErrorKind;
 use log::*;
-use std::fmt::{Debug, Formatter, Error};
 use std::collections::BTreeMap;
+use std::fmt::{Debug, Error, Formatter};
 use std::io;
 use std::path::Path;
 
@@ -141,10 +141,7 @@ impl GzChunkStorage {
     }
 
     pub(super) fn new_initialized(ty: EntityType, path: String, data: GzippedData) -> Self {
-        let s = GzChunkStorage {
-            ty,
-            path,
-        };
+        let s = GzChunkStorage { ty, path };
         s.store(data);
         s
     }
@@ -267,9 +264,9 @@ pub trait CompressedData {
     fn decompress(&self) -> String;
 
     fn change<F>(&self, ty: EntityType, f: F) -> (Self, usize)
-        where
-            F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>),
-            Self: Sized
+    where
+        F: FnOnce(&mut BTreeMap<EntityId, SerializedEntity>),
+        Self: Sized,
     {
         use measure_time::*;
         // 1152ms for the function with raw data len=22202461 and 1291 entities
@@ -319,9 +316,9 @@ pub trait CompressedData {
 
     fn from_binary(data: Vec<u8>) -> Self;
 
-     fn len(&self) -> usize;
+    fn len(&self) -> usize;
 
-     fn into_bytes(self) -> Bytes;
+    fn into_bytes(self) -> Bytes;
 }
 
 impl AsRef<[u8]> for GzippedData {

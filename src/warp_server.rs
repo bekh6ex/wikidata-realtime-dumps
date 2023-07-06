@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
 use std::convert::Infallible;
-use std::net::{SocketAddrV4, Ipv4Addr};
+use std::net::{Ipv4Addr, SocketAddrV4};
 use std::sync::Arc;
 
 use actix::Addr;
-use warp::hyper::{StatusCode};
+use warp::hyper::StatusCode;
 use warp::reply::Response;
 use warp::*;
 
@@ -15,7 +15,10 @@ use crate::prelude::EntityType;
 pub(super) async fn start(ar: &Arc<BTreeMap<EntityType, Addr<Archivarius>>>) {
     let hello = get_dump_route(ar);
 
-    let port: u16 = std::env::var("WD_PORT").unwrap_or("8080".into()).parse().expect("Invalid port. Should be u16");
+    let port: u16 = std::env::var("WD_PORT")
+        .unwrap_or("8080".into())
+        .parse()
+        .expect("Invalid port. Should be u16");
     let addr = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), port);
 
     let ws = warp::serve(hello).run(addr);
@@ -24,7 +27,7 @@ pub(super) async fn start(ar: &Arc<BTreeMap<EntityType, Addr<Archivarius>>>) {
 
 fn get_dump_route(
     ar: &Arc<BTreeMap<EntityType, Addr<Archivarius>>>,
-) -> impl Filter<Extract=impl warp::Reply, Error=warp::Rejection> + Clone {
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::path!("dumps" / String)
         .and(warp::get())
         .and(with_actor(ar))
@@ -34,8 +37,8 @@ fn get_dump_route(
 fn with_actor(
     ar: &Arc<BTreeMap<EntityType, Addr<Archivarius>>>,
 ) -> impl Filter<
-    Extract=(Arc<BTreeMap<EntityType, Addr<Archivarius>>>, ),
-    Error=std::convert::Infallible,
+    Extract = (Arc<BTreeMap<EntityType, Addr<Archivarius>>>,),
+    Error = std::convert::Infallible,
 > + Clone {
     let ar = ar.clone();
     warp::any().map(move || ar.clone())
@@ -61,9 +64,9 @@ async fn get_dump_handler(
     }
 
     #[allow(unused_must_use)]
-        {
-            ty.split_off(ty.len() - suffix.len());
-        }
+    {
+        ty.split_off(ty.len() - suffix.len());
+    }
 
     let ty: Option<&EntityType> = ENTITY_NAMES
         .iter()

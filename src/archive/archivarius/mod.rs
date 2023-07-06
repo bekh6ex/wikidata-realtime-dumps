@@ -5,24 +5,23 @@ use std::sync::{RwLock, RwLockReadGuard};
 
 use actix::{Actor, Addr, AsyncContext, Context, Handler, Message, MessageResult};
 use bytes::Bytes;
-use futures::*;
 use futures::future::*;
 use futures::stream::iter;
+use futures::*;
 use log::*;
 use serde::{Deserialize, Serialize};
 
-use crate::archive::{GetDump, GetDumpResult, UnitFuture, UpdateChunkCommand, UpdateCommand};
 use crate::archive::arbiter_pool::ArbiterPool;
+use crate::archive::{GetDump, GetDumpResult, UnitFuture, UpdateChunkCommand, UpdateCommand};
 use crate::events::EventId;
 use crate::prelude::*;
 
 use self::volume::{GetChunk, VolumeKeeper};
 
-pub use self::volume::{VolumeKeeperConfig};
+pub use self::volume::VolumeKeeperConfig;
 
 mod tracker;
 mod volume;
-
 
 pub(crate) struct Archivarius {
     volume_keeper_config: VolumeKeeperConfig,
@@ -38,7 +37,12 @@ pub(crate) struct Archivarius {
 }
 
 impl Archivarius {
-    pub fn new(root_path: &str, ty: EntityType, volume_keeper_config: VolumeKeeperConfig, arbiters: ArbiterPool) -> Archivarius {
+    pub fn new(
+        root_path: &str,
+        ty: EntityType,
+        volume_keeper_config: VolumeKeeperConfig,
+        arbiters: ArbiterPool,
+    ) -> Archivarius {
         let store = ArchivariusStore::new(root_path, ty);
 
         let state = store.load().unwrap_or_default();
@@ -62,9 +66,17 @@ impl Archivarius {
                 let volume_root_path = volume_root_path.clone();
                 let range = er.clone();
                 let volume_keeper_config = volume_keeper_config.clone();
-                let vol = VolumeKeeper::start_in_arbiter(&arbiters.next().as_ref().handle(), move |_| {
-                    volume::VolumeKeeper::persistent(volume_root_path, volume_keeper_config, ty, id as i32, *range.inner.start(), Some(*range.inner.end()))
-                });
+                let vol =
+                    VolumeKeeper::start_in_arbiter(&arbiters.next().as_ref().handle(), move |_| {
+                        volume::VolumeKeeper::persistent(
+                            volume_root_path,
+                            volume_keeper_config,
+                            ty,
+                            id as i32,
+                            *range.inner.start(),
+                            Some(*range.inner.end()),
+                        )
+                    });
 
                 (er.clone(), vol)
             })
@@ -78,9 +90,23 @@ impl Archivarius {
             let volume_keeper_config = volume_keeper_config.clone();
             move |_| {
                 if initialized {
-                    VolumeKeeper::persistent(volume_root_path.clone(), volume_keeper_config, ty, new_id as i32, start_id_for_new_volume, None)
+                    VolumeKeeper::persistent(
+                        volume_root_path.clone(),
+                        volume_keeper_config,
+                        ty,
+                        new_id as i32,
+                        start_id_for_new_volume,
+                        None,
+                    )
                 } else {
-                    VolumeKeeper::in_memory(volume_root_path.clone(), volume_keeper_config, ty, new_id as i32, start_id_for_new_volume, None)
+                    VolumeKeeper::in_memory(
+                        volume_root_path.clone(),
+                        volume_keeper_config,
+                        ty,
+                        new_id as i32,
+                        start_id_for_new_volume,
+                        None,
+                    )
                 }
             }
         });
@@ -105,7 +131,11 @@ impl Archivarius {
     }
 
     fn state(&self) -> StoredState {
-        let closed = self.finished_volumes.iter().map(|(r, _)| r.clone()).collect();
+        let closed = self
+            .finished_volumes
+            .iter()
+            .map(|(r, _)| r.clone())
+            .collect();
 
         StoredState {
             closed,
@@ -135,7 +165,12 @@ impl Archivarius {
         }
     }
 
-    fn maybe_close_the_open_volume(self_addr: &Addr<Self>, max_chunk_size: usize, child: Addr<VolumeKeeper>, size: usize) {
+    fn maybe_close_the_open_volume(
+        self_addr: &Addr<Self>,
+        max_chunk_size: usize,
+        child: Addr<VolumeKeeper>,
+        size: usize,
+    ) {
         if size > max_chunk_size {
             debug!("Schedule the open actor closing. chunk_size={}", size);
             self_addr.do_send(CloseOpenActor { addr: child });
@@ -175,9 +210,23 @@ impl Archivarius {
                 let volume_keeper_config = self.volume_keeper_config.clone();
                 move |_| {
                     if initializing {
-                        VolumeKeeper::in_memory(volume_root_path.clone(), volume_keeper_config, ty, new_id as i32, range_start_for_new_volume, None)
+                        VolumeKeeper::in_memory(
+                            volume_root_path.clone(),
+                            volume_keeper_config,
+                            ty,
+                            new_id as i32,
+                            range_start_for_new_volume,
+                            None,
+                        )
                     } else {
-                        VolumeKeeper::persistent(volume_root_path.clone(), volume_keeper_config, ty, new_id as i32, range_start_for_new_volume, None)
+                        VolumeKeeper::persistent(
+                            volume_root_path.clone(),
+                            volume_keeper_config,
+                            ty,
+                            new_id as i32,
+                            range_start_for_new_volume,
+                            None,
+                        )
                     }
                 }
             });
@@ -186,7 +235,9 @@ impl Archivarius {
 
         if self.initialization_in_progress() {
             info!("Sending command to persist the chunk");
-            old_open_actor.do_send(volume::Persist::Close {range_end: last_id_to_open_volume });
+            old_open_actor.do_send(volume::Persist::Close {
+                range_end: last_id_to_open_volume,
+            });
             // TODO: Must await Persist response to sore Archivarius state
         }
 
@@ -243,8 +294,11 @@ impl Handler<GetDump> for Archivarius {
         let thread = thread1.name().unwrap_or("<unknown>").to_owned();
         debug!("thread={} Get dump", thread);
 
-        let mut children: Vec<Addr<_>> =
-            self.finished_volumes.iter().map(|(_, c)| c.clone()).collect();
+        let mut children: Vec<Addr<_>> = self
+            .finished_volumes
+            .iter()
+            .map(|(_, c)| c.clone())
+            .collect();
 
         children.push(self.open_volume.clone());
 
@@ -476,7 +530,6 @@ impl Handler<Initialization> for Archivarius {
         }
     }
 }
-
 
 struct ArchivariusStore {
     path: RwLock<String>,

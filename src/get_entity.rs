@@ -209,11 +209,9 @@ mod test {
             })
             .buffered(50)
             .enumerate()
-            .for_each(|(i, _e)| {
-                async move {
-                    if i % 1 == 0 {
-                        info!("Got {}", i)
-                    }
+            .for_each(|(i, _e)| async move {
+                if i % 1 == 0 {
+                    info!("Got {}", i)
                 }
             })
             .await;

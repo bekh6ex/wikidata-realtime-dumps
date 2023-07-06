@@ -18,9 +18,8 @@ use crate::get_entity::GetEntityClient;
 
 use super::prelude::*;
 
-use isahc::*;
 use futures_backoff::Strategy;
-
+use isahc::*;
 
 mod event_stream;
 
@@ -65,8 +64,6 @@ pub async fn get_current_event_id() -> EventId {
     get_top_event_id(None).await
 }
 
-
-
 pub fn create_client() -> HttpClient {
     use isahc::config::{RedirectPolicy, VersionNegotiation};
     use isahc::prelude::*;
@@ -81,7 +78,6 @@ pub fn create_client() -> HttpClient {
 }
 
 async fn open_new_sse_stream(event_id: Option<String>) -> impl Stream<Item = Event> {
-
     let send_request = || {
         let event_id = event_id.clone();
         async move {
@@ -120,7 +116,6 @@ pub async fn update_command_stream(
     ty: EntityType,
     event_id: EventId,
 ) -> impl Stream<Item = UpdateCommand> {
-
     let event_id = event_id.rewind(Duration::from_secs(20)); // Due to the current VolumeKeeper batching implementation
 
     get_wikidata_event_stream(Some(event_id), ty)
@@ -203,7 +198,7 @@ async fn get_wikidata_event_stream(
 
         match ch {
             Event::Message { id, data, .. } => SortableEvent {
-                id: EventId::new(id.unwrap() ),
+                id: EventId::new(id.unwrap()),
                 data,
             },
             _ => panic!(),
@@ -215,10 +210,7 @@ async fn get_wikidata_event_stream(
         let hint: EventDataHint = serde_json::from_str(&event.data).unwrap();
         let result = if hint.wiki == WIKIDATA && hint.namespace == ty.namespace().n() {
             let data: EventData = serde_json::from_str(&event.data).unwrap();
-            Some(ProperEvent {
-                id: event.id,
-                data,
-            })
+            Some(ProperEvent { id: event.id, data })
         } else {
             None
         };
@@ -276,20 +268,20 @@ impl EventId {
     #[cfg(test)]
     pub(crate) fn test(timestamp: u64) -> Self {
         EventId {
-           parts: vec![
-               SerializedEventIdPart {
-                   topic: "".to_owned(),
-                   partition: 0,
-                   timestamp: Some(timestamp),
-                   offset: None,
-               },
-               SerializedEventIdPart {
-                   topic: "".to_owned(),
-                   partition: 0,
-                   timestamp: None,
-                   offset: Some(-1),
-               }
-           ]
+            parts: vec![
+                SerializedEventIdPart {
+                    topic: "".to_owned(),
+                    partition: 0,
+                    timestamp: Some(timestamp),
+                    offset: None,
+                },
+                SerializedEventIdPart {
+                    topic: "".to_owned(),
+                    partition: 0,
+                    timestamp: None,
+                    offset: Some(-1),
+                },
+            ],
         }
     }
 
@@ -446,7 +438,7 @@ impl EventData {
                         );
                         // TODO: Fix this hack. Should be none
                         let data = format!(r#"{{"id":"{}", "lastrevid":{}}}"#, id, revision_id.0);
-                        SerializedEntity{
+                        SerializedEntity {
                             id,
                             revision: revision_id,
                             data,

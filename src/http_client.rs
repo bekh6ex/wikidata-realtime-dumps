@@ -1,7 +1,7 @@
 use futures::*;
-use hyper::{Body, Client as HyperClient, Request, StatusCode};
 use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
+use hyper::{Body, Client as HyperClient, Request, StatusCode};
 use hyper_rustls::HttpsConnector;
 use isahc::prelude::*;
 use isahc::HttpClient;
@@ -17,9 +17,12 @@ pub type HClient = HyperClient<HttpsConnector<HttpConnector<GaiResolver>>, Body>
 pub fn create_hyper_client() -> HClient {
     HyperClient::builder()
         .pool_max_idle_per_host(1)
-        .build::<_, hyper::Body>(hyper_rustls::HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .https_only().enable_all_versions().build()
+        .build::<_, hyper::Body>(
+            hyper_rustls::HttpsConnectorBuilder::new()
+                .with_native_roots()
+                .https_only()
+                .enable_all_versions()
+                .build(),
         )
 }
 
@@ -57,7 +60,6 @@ pub fn get_json<'a, T: Deserialize<'a>>(
     client: &HttpClient,
     url: String,
 ) -> impl Future<Output = Result<Option<T>, Error>> + Send + '_ {
-
     let session = generate_session_id();
 
     let req = Request::builder()
@@ -71,7 +73,9 @@ pub fn get_json<'a, T: Deserialize<'a>>(
     debug!("Sending get request to `{}`", url);
     let fut_resp = client.send_async(req);
     async move {
-        let mut response: isahc::http::Response<isahc::AsyncBody> = fut_resp.await.map_err(|e| Error::GetResponse(format!("{}", e.kind())))?;
+        let mut response: isahc::http::Response<isahc::AsyncBody> = fut_resp
+            .await
+            .map_err(|e| Error::GetResponse(format!("{}", e.kind())))?;
 
         debug!("Got response. status={} url={}", response.status(), url);
 
@@ -87,7 +91,10 @@ pub fn get_json<'a, T: Deserialize<'a>>(
 
         use bytes::Buf;
 
-        let body = response.text().await.map_err(|e| GetResponse(format!("{}", e.kind())))?;
+        let body = response
+            .text()
+            .await
+            .map_err(|e| GetResponse(format!("{}", e.kind())))?;
 
         let body = Bytes::from(body);
 

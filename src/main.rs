@@ -16,8 +16,8 @@ use crate::events::{update_command_stream, EventId};
 use crate::prelude::EntityType;
 
 use self::archive::{start, ArchivariusMap};
-use crate::init::{ArchiveFormat, DumpConfig, DumpFormat};
 use crate::get_entity::GetEntityClient;
+use crate::init::{ArchiveFormat, DumpConfig, DumpFormat};
 
 mod archive;
 mod events;
@@ -36,18 +36,19 @@ async fn main() -> std::io::Result<()> {
 
     info!("Starting...");
 
-   let dump_config: BTreeMap<EntityType, DumpConfig> = get_dump_config();
+    let dump_config: BTreeMap<EntityType, DumpConfig> = get_dump_config();
     // let dump_config: BTreeMap<EntityType, DumpConfig> = BTreeMap::new();
 
     // TODO: Lock storage file
 
-    let types = vec![/*EntityType::Lexeme, EntityType::Property,*/ EntityType::Item];
+    let types = vec![
+        /*EntityType::Lexeme, EntityType::Property,*/ EntityType::Item,
+    ];
 
     let map: ArchivariusMap = start(types);
 
     let ws = warp_server::start(&map);
     let client = GetEntityClient::default();
-
 
     let update_streams = get_streams(client, map.clone(), dump_config).await;
 
@@ -93,8 +94,13 @@ async fn get_streams(
         let client = client.clone();
         async move {
             let entity_type = entity_type;
-            let initial_event_id =
-                initialize(client.clone(), entity_type, archive_actor.clone(), dump_config).await;
+            let initial_event_id = initialize(
+                client.clone(),
+                entity_type,
+                archive_actor.clone(),
+                dump_config,
+            )
+            .await;
 
             let update_stream = update_command_stream(client, entity_type, initial_event_id).await;
 

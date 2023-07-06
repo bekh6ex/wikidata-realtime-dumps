@@ -70,7 +70,7 @@ pub async fn init_inner(
             None => {
                 info!("No dump config for {:?}", ty);
                 None
-            },
+            }
             Some(dump_config) => {
                 assert_eq!(ty, dump_config.ty);
                 info!("Got dump config for {:?}: {:?}", ty, dump_config);

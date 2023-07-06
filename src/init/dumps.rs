@@ -1,4 +1,4 @@
-use async_compression::futures::bufread::{BzDecoder};
+use async_compression::futures::bufread::BzDecoder;
 use async_std::prelude::*;
 use futures::future::ready;
 use futures::stream::*;
@@ -14,15 +14,15 @@ use serde::Deserialize;
 use continuous_download::ContinuousDownloadStream;
 use sorted_stream::BufferedSortedStream;
 
-use crate::http_client::{create_hyper_client};
+use crate::http_client::create_hyper_client;
 use crate::init::{ArchiveFormat, DumpConfig, DumpFormat};
 use crate::prelude::*;
-use std::pin::Pin;
 use log::*;
+use std::pin::Pin;
 
 pub(crate) async fn get_dump_stream(
     dump_config: DumpConfig,
-) -> impl Stream<Item=SerializedEntity> {
+) -> impl Stream<Item = SerializedEntity> {
     let stream = json_stream(dump_config.clone()).await;
     let stream = convert_to_serialized_entity(dump_config.ty, stream);
     sort_stream(stream)
@@ -45,9 +45,7 @@ fn convert_to_serialized_entity(
             async_std::task::spawn(async move {
                 let result = serde_json::from_str::<EntityInDump>(&s);
                 match result {
-                    Ok(e) => {
-                        Some((e, s))
-                    }
+                    Ok(e) => Some((e, s)),
                     Err(e) => {
                         warn!("Failed to parse entity: {}", e);
                         None
@@ -105,22 +103,19 @@ fn download_dump_with_restarts(
                 dump_url.clone(),
                 offset,
             )))
-                .flatten()
+            .flatten()
         },
         10_000,
     )
 }
 
-pub async fn json_stream(dump_config: DumpConfig) -> impl Stream<Item=String> {
+pub async fn json_stream(dump_config: DumpConfig) -> impl Stream<Item = String> {
     let client1 = create_hyper_client();
     let client = client1;
 
     let stream = download_dump_with_restarts(client, dump_config.url.clone());
 
-    let stream = stream.map(|r| {
-        r.map(|b: hyper::body::Bytes| { bytes::Bytes::from(b.to_vec()) })
-    });
-
+    let stream = stream.map(|r| r.map(|b: hyper::body::Bytes| bytes::Bytes::from(b.to_vec())));
 
     let decoder: Pin<Box<dyn AsyncRead>> = match dump_config.archive_format {
         ArchiveFormat::Bzip2 => Box::pin(BzDecoder::new(stream.into_async_read())),
@@ -129,7 +124,7 @@ pub async fn json_stream(dump_config: DumpConfig) -> impl Stream<Item=String> {
 
     let stream = FramedRead::new(decoder, LinesCodec {});
 
-    let stream: Pin<Box<dyn Stream<Item=String>>> = match dump_config.dump_format {
+    let stream: Pin<Box<dyn Stream<Item = String>>> = match dump_config.dump_format {
         DumpFormat::WikidataJsonArray => {
             // TODO: Handle last line "]\n"
             let stream = stream

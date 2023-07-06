@@ -9,7 +9,7 @@ use log::*;
 use storage::GzippedData;
 use storage::VolumeStorage;
 
-use crate::archive::{UpdateChunkCommand};
+use crate::archive::UpdateChunkCommand;
 use crate::prelude::{EntityId, EntityType, SerializedEntity};
 
 use self::storage::Volume;
@@ -28,7 +28,14 @@ pub struct VolumeKeeper {
 }
 
 impl VolumeKeeper {
-    pub(super) fn in_memory(root_path: String, config: VolumeKeeperConfig, ty: EntityType, i: i32, from: EntityId, to: Option<EntityId>) -> VolumeKeeper {
+    pub(super) fn in_memory(
+        root_path: String,
+        config: VolumeKeeperConfig,
+        ty: EntityType,
+        i: i32,
+        from: EntityId,
+        to: Option<EntityId>,
+    ) -> VolumeKeeper {
         let to = to.map(|to| {
             assert!(to > from);
             to
@@ -36,10 +43,7 @@ impl VolumeKeeper {
         VolumeKeeper {
             i,
             config,
-            storage: Some(Volume::new_open(
-                ty,
-                format!("{}/{}.zst", root_path, i),
-            )),
+            storage: Some(Volume::new_open(ty, format!("{}/{}.zst", root_path, i))),
             command_buffer: vec![],
             write_down_reminder: None,
             range_start: from,
@@ -48,7 +52,14 @@ impl VolumeKeeper {
         }
     }
 
-    pub(super) fn persistent(root_path: String, config: VolumeKeeperConfig, ty: EntityType, i: i32, from: EntityId, to: Option<EntityId>) -> Self {
+    pub(super) fn persistent(
+        root_path: String,
+        config: VolumeKeeperConfig,
+        ty: EntityType,
+        i: i32,
+        from: EntityId,
+        to: Option<EntityId>,
+    ) -> Self {
         let to = to.map(|to| {
             assert!(to > from);
             to
@@ -57,10 +68,7 @@ impl VolumeKeeper {
         VolumeKeeper {
             i,
             config,
-            storage: Some(Volume::new_closed(
-                ty,
-                format!("{}/{}.zst", root_path, i),
-            )),
+            storage: Some(Volume::new_closed(ty, format!("{}/{}.zst", root_path, i))),
             command_buffer: vec![],
             write_down_reminder: None,
             range_start: from,
@@ -85,50 +93,53 @@ impl VolumeKeeper {
 
     fn apply_changes(&mut self, commands: Vec<UpdateChunkCommand>) -> usize {
         let start = Instant::now();
-        info!("VolumeKeeper({:?}:{}) applies {} commands",
-              self.range_start.ty(),
-              self.i,
-              commands.len());
+        info!(
+            "VolumeKeeper({:?}:{}) applies {} commands",
+            self.range_start.ty(),
+            self.i,
+            commands.len()
+        );
 
         let entities_cnt = RefCell::new(0usize);
         let entities_cnt_inner = entities_cnt.clone();
 
-        let size = self.storage()
-            .change(move |entities: &mut BTreeMap<EntityId, SerializedEntity>| {
-                for msg in commands {
-                    if entities.contains_key(&msg.entity_id()) {
-                        let current_revision = entities.get(&msg.entity_id()).unwrap().revision;
-                        if current_revision > msg.revision() {
-                            debug!(
-                                "Current revision is newer than one in command. {} {:?} {:?}",
-                                msg.message_type(),
-                                msg.entity_id(),
-                                msg.revision()
-                            );
+        let size =
+            self.storage()
+                .change(move |entities: &mut BTreeMap<EntityId, SerializedEntity>| {
+                    for msg in commands {
+                        if entities.contains_key(&msg.entity_id()) {
+                            let current_revision = entities.get(&msg.entity_id()).unwrap().revision;
+                            if current_revision > msg.revision() {
+                                debug!(
+                                    "Current revision is newer than one in command. {} {:?} {:?}",
+                                    msg.message_type(),
+                                    msg.entity_id(),
+                                    msg.revision()
+                                );
+                            } else {
+                                match msg {
+                                    UpdateChunkCommand::Update { entity } => {
+                                        entities.insert(entity.id, entity);
+                                    }
+                                    UpdateChunkCommand::Delete { id, revision: _ } => {
+                                        entities.remove(&id);
+                                    }
+                                }
+                            }
                         } else {
                             match msg {
                                 UpdateChunkCommand::Update { entity } => {
                                     entities.insert(entity.id, entity);
                                 }
-                                UpdateChunkCommand::Delete { id, revision: _ } => {
-                                    entities.remove(&id);
-                                }
+                                UpdateChunkCommand::Delete { id, revision } => warn!(
+                                    "Expect to delete entity, but there is none. {:?} {:?}",
+                                    id, revision
+                                ),
                             }
-                        }
-                    } else {
-                        match msg {
-                            UpdateChunkCommand::Update { entity } => {
-                                entities.insert(entity.id, entity);
-                            }
-                            UpdateChunkCommand::Delete { id, revision } => warn!(
-                                "Expect to delete entity, but there is none. {:?} {:?}",
-                                id, revision
-                            ),
                         }
                     }
-                }
-                entities_cnt_inner.replace(entities.len());
-            });
+                    entities_cnt_inner.replace(entities.len());
+                });
         self.volume_size = Some(size);
 
         let took = Instant::now() - start;
@@ -189,7 +200,7 @@ impl Handler<UpdateChunkCommand> for VolumeKeeper {
 
     fn handle(&mut self, msg: UpdateChunkCommand, ctx: &mut Self::Context) -> Self::Result {
         if !self.in_the_range(msg.entity_id()) {
-//            self.master.do_send(Redeliver(msg))
+            //            self.master.do_send(Redeliver(msg))
         }
         debug!(
             "UpdateCommand[actor_id={}]: entity_id={}",
@@ -207,13 +218,10 @@ impl Handler<UpdateChunkCommand> for VolumeKeeper {
                 None => {
                     let buffer = core::mem::take(&mut self.command_buffer);
                     self.apply_changes(buffer)
-                },
-                Some(size) => {
-                    size
-                },
+                }
+                Some(size) => size,
             }
         };
-
 
         self.remind_to_write_down(ctx);
 
@@ -243,7 +251,7 @@ impl Actor for VolumeKeeper {
 #[rtype(result = "()")]
 pub enum Persist {
     JustPersist,
-    Close{ range_end: EntityId }
+    Close { range_end: EntityId },
 }
 
 impl Handler<Persist> for VolumeKeeper {
@@ -254,11 +262,11 @@ impl Handler<Persist> for VolumeKeeper {
         match msg {
             Persist::JustPersist => {
                 // Already done
-            },
+            }
             Persist::Close { range_end } => {
                 assert!(self.range_end.is_none());
                 self.range_end = Some(range_end)
-            },
+            }
         }
         MessageResult(())
     }
