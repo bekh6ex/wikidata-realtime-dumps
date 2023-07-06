@@ -29,7 +29,6 @@ flate2 = "1.0.13"
 pin-utils = "0.1.0-alpha.4"
 futures-util = "0.3.1"
 futures-backoff = { git="https://github.com/bcmcmill/rust-futures-backoff.git", branch="async_await" }
-backoff = "0.4.0"
 measure_time = "0.8.2"
 hyper = { version = "0.14.13", features = ["stream"] }
 hyper-rustls = { version = "0.24.1", features = ["http2"] }
@@ -44,7 +43,6 @@ continuous_download = { path = "continuous_download" }
 sorted_stream = { path = "sorted_stream" }
 stream_throttle = { version = "0.4.0", default-features = false, features = ['timer-futures-timer'] }
 isahc = "1.7.2"
-bzip2-rs = { git = "https://github.com/paolobarbolini/bzip2-rs.git", branch = "main", features = ["rayon", "rustc_1_63"] }
 zstd = "0.12.3+zstd.1.5.2"
 
 
