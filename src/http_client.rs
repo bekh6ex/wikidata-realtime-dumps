@@ -4,6 +4,7 @@ use hyper::client::connect::dns::GaiResolver;
 use hyper::client::HttpConnector;
 use hyper_rustls::HttpsConnector;
 use isahc::prelude::*;
+use isahc::HttpClient;
 use log::*;
 use rand::Rng;
 use serde::de::Deserialize;
@@ -18,7 +19,10 @@ pub fn create_hyper_client() -> HClient {
         // .http2_keep_alive_interval(None)
         // .http2_only(true)
         .pool_max_idle_per_host(1)
-        .build::<_, hyper::Body>(hyper_rustls::HttpsConnector::with_native_roots())
+        .build::<_, hyper::Body>(hyper_rustls::HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .https_only().enable_all_versions().build()
+        )
 }
 
 pub fn create_client() -> HttpClient {
@@ -65,13 +69,13 @@ pub fn get_json<'a, T: Deserialize<'a>>(
         .header("Accept-Encoding", "deflate")
         .header("Cookie", "Session=".to_owned() + &session)
         .uri(url.clone())
-        .body(isahc::Body::empty())
+        .body(isahc::AsyncBody::empty())
         .unwrap();
 
     debug!("Sending get request to `{}`", url);
     let fut_resp = client.send_async(req);
     async move {
-        let mut response: isahc::http::Response<isahc::Body> = fut_resp.await.map_err(Error::GetResponse)?;
+        let mut response: isahc::http::Response<isahc::AsyncBody> = fut_resp.await.map_err(|e| Error::GetResponse(format!("{}", e.kind())))?;
 
         debug!("Got response. status={} url={}", response.status(), url);
 
@@ -85,11 +89,10 @@ pub fn get_json<'a, T: Deserialize<'a>>(
 
         //Q 120 367 626
 
-        use bytes::buf::BufExt;
         use bytes::Buf;
         use isahc::ResponseExt;
 
-        let body = response.text_async().await.map_err(|e| GetResponse(isahc::Error::Io(e)))?;
+        let body = response.text().await.map_err(|e| GetResponse(format!("{}", e.kind())))?;
 
         let body = Bytes::from(body);
 
@@ -110,7 +113,7 @@ pub fn get_json<'a, T: Deserialize<'a>>(
 pub enum Error {
     BadRequest,
     TooManyRequests,
-    GetResponse(isahc::Error),
+    GetResponse(String),
     ResponseFormat {
         cause: serde_json::Error,
         body: String,

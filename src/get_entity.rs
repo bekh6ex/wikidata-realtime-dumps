@@ -13,7 +13,7 @@ use stream_throttle::{ThrottlePool, ThrottleRate};
 
 use crate::http_client::{create_client, get_json, HClient, Error};
 use crate::prelude::*;
-use isahc::prelude::*;
+use isahc::*;
 
 #[derive(Clone)]
 pub struct GetEntityClient {

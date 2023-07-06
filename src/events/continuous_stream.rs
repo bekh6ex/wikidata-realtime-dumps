@@ -79,7 +79,7 @@ where
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match self.as_mut().stream().poll_next(cx) {
             Poll::Ready(Some(event)) => {
-                if let Event::LastEventId { ref id } = event {
+                if let Event::Message { id: Some(ref id), .. } = event {
                     // TODO Check what standard says about empty string
                     self.as_mut().last_event_id().set(Some(id.clone()))
                 }

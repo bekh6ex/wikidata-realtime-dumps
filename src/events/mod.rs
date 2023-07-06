@@ -18,7 +18,7 @@ use crate::get_entity::GetEntityClient;
 
 use super::prelude::*;
 
-use isahc::prelude::*;
+use isahc::*;
 use futures_backoff::Strategy;
 use isahc::Error;
 
@@ -97,7 +97,7 @@ async fn open_new_sse_stream(event_id: Option<String>) -> impl Stream<Item = Eve
             if event_id.is_some() {
                 req = req.header("last-event-id", event_id.clone().unwrap());
             }
-            let req = req.body(Body::empty()).unwrap();
+            let req = req.body(AsyncBody::empty()).unwrap();
 
             trace!("Sending request: {:?}", req);
 
@@ -164,7 +164,7 @@ async fn id_stream(from: Option<EventId>) -> impl Stream<Item = EventId> {
         .await
         .filter_map(|e: Event| {
             let option: Option<EventId> = match e {
-                Event::LastEventId { id } => Some(EventId::new(id)),
+                Event::Message { id, .. } => id.map(EventId::new),
                 _ => None,
             };
             ready(option)
@@ -204,12 +204,12 @@ async fn get_wikidata_event_stream(
 ) -> impl Stream<Item = ProperEvent> {
     let stream = open_new_sse_stream_with_retries(event_id.map(|i| i.to_json_string())).await;
 
-    let stream = stream.chunks(2).map(|ch: Vec<Event>| {
-        let s = ch.as_slice();
+    let stream = stream.map(|ch: Event| {
+        // let s = ch.as_slice();
 
-        match s {
-            [Event::LastEventId { id }, Event::Message { data, .. }] => SortableEvent {
-                id: EventId::new(id.clone()),
+        match ch {
+            Event::Message { id, data, .. } => SortableEvent {
+                id: EventId::new(id.unwrap().clone() ),
                 data: data.clone(),
             },
             _ => panic!(),

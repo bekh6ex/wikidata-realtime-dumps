@@ -8,11 +8,13 @@ use log::*;
 use sse_codec::{decode_stream, Event};
 
 use isahc::prelude::*;
+use isahc::{Response, Body};
+use isahc::AsyncBody;
 
 use std::fmt::Debug;
 
 pub(super) fn response_to_stream(
-    resp: Response<Body>,
+    resp: Response<AsyncBody>,
     _event_id: Option<String>,
 ) -> impl Stream<Item = Event> {
     let body = resp.into_body();
@@ -21,11 +23,9 @@ pub(super) fn response_to_stream(
     let event_stream = finish_stream_on_error(decoded_stream);
 
     let stream = event_stream
-        .chunks(2)
         .take_while(|v| {
-            let s = v.as_slice();
-            match s {
-                [Event::LastEventId { .. }, Event::Message { .. }] => ready(true),
+            match v {
+                Event::Message { .. } => ready(true),
                 _ => {
                     info!("Stopping stream. Wrong set of messages: {:?}", v);
                     ready(false)
@@ -33,17 +33,14 @@ pub(super) fn response_to_stream(
             }
         })
         .filter(|v| {
-            let s = v.as_slice();
-            match s {
-                [Event::LastEventId { .. }, Event::Message { .. }] => ready(true),
+            match v {
+                Event::Message { .. } => ready(true),
                 _ => {
                     info!("Stopping stream. Wrong set of messages: {:?}", v);
                     ready(false)
                 }
             }
-        })
-        .map(futures::stream::iter)
-        .flatten();
+        });
 
     log_start_of_the_stream(stream)
 }

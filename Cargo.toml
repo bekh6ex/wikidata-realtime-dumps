@@ -16,12 +16,11 @@ panic = 'abort'
 
 
 [dependencies]
-cargo-edit = "0.8.0"
-actix="0.12.0"
+actix="0.13.0"
 actix-rt = "2.3.0"
 futures = { version="0.3.17", features=["compat"] }
-bytes = "0.5"
-sse-codec = {version="0.1.0", git="https://github.com/bekh6ex/sse-codec.git", branch="fix-stream-bug"}
+bytes = "1.4.0"
+sse-codec = "0.3.2"
 serde = {version="1.0.104", features=["serde_derive"]}
 serde_json = "1.0.44"
 log = "0.4.8"
@@ -30,29 +29,29 @@ flate2 = "1.0.13"
 pin-utils = "0.1.0-alpha.4"
 futures-util = "0.3.1"
 futures-backoff = { git="https://github.com/bcmcmill/rust-futures-backoff.git", branch="async_await" }
-backoff = "0.1.5"
-measure_time = "0.6"
+backoff = "0.4.0"
+measure_time = "0.8.2"
 hyper = { version = "0.14.13", features = ["stream"] }
-hyper-rustls = "0.22.1"
-log4rs = "0.9.0"
+hyper-rustls = { version = "0.24.1", features = ["http2"] }
+log4rs = "1.2.0"
 warp = "0.3.1"
-rand = "0.7.3"
+rand = "0.8.5"
 async-compression = { version = "0.4.0", features = ["bzip2", "gzip", "futures-io"] }
-futures_codec = "0.3.4"
+futures_codec = "0.4.1"
 futures-timer = "3.0.2"
 num_cpus = "1.13.0"
 continuous_download = { path = "continuous_download" }
 sorted_stream = { path = "sorted_stream" }
-stream_throttle = { version = "0.3.1", default-features = false, features = ['timer-futures-timer'] }
-isahc = "0.9"
+stream_throttle = { version = "0.4.0", default-features = false, features = ['timer-futures-timer'] }
+isahc = "1.7.2"
 bzip2-rs = { git = "https://github.com/paolobarbolini/bzip2-rs.git", branch = "main", features = ["rayon", "rustc_1_63"] }
 zstd = "0.12.3+zstd.1.5.2"
 
 
 [dev-dependencies]
 futures-test = "0.3.17"
-proptest = "0.9.5"
-proptest-attr-macro = "0.1.0"
+proptest = "1.2.0"
+proptest-attr-macro = "1.0.0"
 
 [dev-dependencies.async-std]
 version = "1.4.0"
